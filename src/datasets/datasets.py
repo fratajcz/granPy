@@ -1,7 +1,13 @@
 from torch_geometric.data import InMemoryDataset
 import os
+import pandas as pd
+from sklearn.preprocessing import OrdinalEncoder
+import torch
+
 
 class GranPyDataset(InMemoryDataset):
+    """ Abstract class that governs the joint behaviours of all datasets in granPy, such as datset naming an storage behaviour.
+        Also governs the joint preprocessing details such as addition of inverse edges etc."""
     def __init__(self, root, hash):
         self.root = root
         self.hash = hash
@@ -21,23 +27,36 @@ class GranPyDataset(InMemoryDataset):
     
     @property
     def processed_file_names(self):
-        return ['{}.pt'.format(self.hash)]
+        data_name = self.hash + '.pt'
+        train_name = self.hash + '_train.pt'
+        val_name = self.hash + '_val.pt'
+        return [data_name, train_name, val_name]
 
     def download(self):
         # Download to `self.raw_dir`.
         pass
 
-    def process(self):
-        # TODO implement dataset-independent processing like adding inverse edges etc
 
 
 class McCallaDataset(GranPyDataset):
-    def __init__(self, root, hash, name):
+    """ Governs the download and preprocessing of the four datasets from McCalla et al. """
+    def __init__(self, root, hash, name, features=True):
+        self.features = features
         self.name = name
-        self.name2path = {"zhao": "gold_standards/mESC/mESC_chipunion.txt",
+        self.name2edgelist = {"zhao": "gold_standards/mESC/mESC_chipunion.txt",
                           "jackson": "gold_standards/yeast/yeast_KDUnion.txt",
                           "shalek": "gold_standards/mDC/mDC_chipunion.txt",
-                          "han": "gold_standards/hESC/hESC_chipunion.txt"}
+                          "han": "gold_standards/hESC/hESC_chipunion.txt",
+                          "test": "../../src/tests/data/edgelist.csv"}
+        
+        self.name2featuretable = {"zhao": "expression_data/normalized/zhao_GSE114952.csv.gz",
+                                  "jackson": "expression_data/normalized/jackson_GSE125162.csv.gz",
+                                  "shalek": "expression_data/normalized/shalek_GSE48968.csv.gz",
+                                  "han": "expression_data/normalized/han_GSE107552.csv.gz"}
+        
+        if name not in self.name2edgelist.keys():
+            raise ValueError("Only datasets for zhao, jackson, shalek and han et al implemented.")
+        
         super().__init__(root, hash)
 
     def download(self):
@@ -49,13 +68,39 @@ class McCallaDataset(GranPyDataset):
         print("Downloading dataset {} from {} to {}".format(self.name, url, filename))
         urlretrieve(url, filename)
 
-        with zipfile.ZipFile(filename,"r") as zip_ref:
+        with zipfile.ZipFile(filename, "r") as zip_ref:
             zip_ref.extractall(self.raw_dir)
 
     @property
     def raw_file_names(self):
-        return [self.name2path[self.name.lower()]]
+        files = []
+        files.append(self.name2edgelist[self.name.lower()])
+        if self.features:
+            files.append(self.name2featuretable[self.name.lower()])
+        return files
+
     
     def process(self):
         # TODO implement dataset-specific processing like edgelist reading
+
+        print("NO CACHE FOUND - Processing data...")
     
+        if self.features:
+            features = self.read_features()
+
+        edges = self.read_edgelist()
+
+    def read_features(self):
+        pass
+
+    def read_edgelist(self):
+        edge_df = pd.read_csv(self.raw_paths[0], header=None, index_col=None, sep="\t")
+        old_shape = edge_df.values.shape
+
+        if hasattr(self, "geneencoder"):
+            encoded_edges = self.geneencoder.transform(edge_df.values.reshape(-1,1)).reshape(old_shape)
+        else:
+            self.geneencoder = OrdinalEncoder()
+            encoded_edges = self.geneencoder.fit_transform(edge_df.values.reshape(-1,1)).reshape(old_shape)
+
+        return torch.LongTensor(encoded_edges)
