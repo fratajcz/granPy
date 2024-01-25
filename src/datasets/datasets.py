@@ -1,4 +1,4 @@
-from torch_geometric.data import InMemoryDataset
+from torch_geometric.data import InMemoryDataset, Data
 import os
 import pandas as pd
 from sklearn.preprocessing import OrdinalEncoder
@@ -43,6 +43,7 @@ class McCallaDataset(GranPyDataset):
     def __init__(self, root, hash, name, features=True):
         self.features = features
         self.name = name
+
         self.name2edgelist = {"zhao": "gold_standards/mESC/mESC_chipunion.txt",
                           "jackson": "gold_standards/yeast/yeast_KDUnion.txt",
                           "shalek": "gold_standards/mDC/mDC_chipunion.txt",
@@ -59,17 +60,21 @@ class McCallaDataset(GranPyDataset):
         
         super().__init__(root, hash)
 
-    def download(self):
+    def download(self) -> None:
         from urllib.request import urlretrieve
         import zipfile
 
-        url = "https://zenodo.org/records/5909090/files/gold_standard_datasets.zip"
         filename = os.path.join(self.raw_dir, "gold_standard_datasets.zip")
-        print("Downloading dataset {} from {} to {}".format(self.name, url, filename))
-        urlretrieve(url, filename)
+        print("Downloading edgelist for {} from {} to {}".format(self.name, self.edgelisturl, filename))
+        urlretrieve(self.edgelisturl, filename)
 
         with zipfile.ZipFile(filename, "r") as zip_ref:
             zip_ref.extractall(self.raw_dir)
+
+        if self.features:
+            filename = os.path.join(self.raw_dir, "gold_standard_datasets.zip")
+            print("Downloading features for {} from {} to {}".format(self.name, self.featuretableurl, filename))
+            # TODO: Add the feature download
 
     @property
     def raw_file_names(self):
@@ -79,9 +84,8 @@ class McCallaDataset(GranPyDataset):
             files.append(self.name2featuretable[self.name.lower()])
         return files
 
-    
-    def process(self):
-        # TODO implement dataset-specific processing like edgelist reading
+    def process(self) -> Data:
+        # TODO implement dataset-specific processing like edgelist and feature reading
 
         print("NO CACHE FOUND - Processing data...")
     
@@ -90,17 +94,28 @@ class McCallaDataset(GranPyDataset):
 
         edges = self.read_edgelist()
 
-    def read_features(self):
+    def read_features(self) -> torch.FloatTensor:
+        # TODO: add feature processing
         pass
 
-    def read_edgelist(self):
+    def read_edgelist(self) -> torch.LongTensor:
         edge_df = pd.read_csv(self.raw_paths[0], header=None, index_col=None, sep="\t")
         old_shape = edge_df.values.shape
 
         if hasattr(self, "geneencoder"):
-            encoded_edges = self.geneencoder.transform(edge_df.values.reshape(-1,1)).reshape(old_shape)
+            encoded_edges = self.geneencoder.transform(edge_df.values.reshape(-1, 1)).reshape(old_shape)
         else:
             self.geneencoder = OrdinalEncoder()
-            encoded_edges = self.geneencoder.fit_transform(edge_df.values.reshape(-1,1)).reshape(old_shape)
+            encoded_edges = self.geneencoder.fit_transform(edge_df.values.reshape(-1, 1)).reshape(old_shape)
 
         return torch.LongTensor(encoded_edges)
+    
+    @classmethod
+    @property
+    def edgelisturl(self):
+        return "https://zenodo.org/records/5909090/files/gold_standard_datasets.zip"
+    
+    @classmethod
+    @property
+    def featuretableurl(self):
+        return "https://zenodo.org/records/5909090/files/expression_data.zip"
