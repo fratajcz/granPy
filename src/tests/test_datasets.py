@@ -4,6 +4,7 @@ import pathlib
 import shutil
 import os
 import requests
+import torch
 
 class McCallaDatasetDownloadTest(unittest.TestCase):
     def setUp(self):
@@ -59,7 +60,29 @@ class McCallaDatasetProcessTest(unittest.TestCase):
         # check if has right shape
         self.assertEqual(features.shape, (8, 3))
 
-        # check if the node 
+        # check if the node "ABCD" is sorted to the top of the list
+        self.assertTrue(torch.equal(features[0, :].squeeze(), torch.FloatTensor((0.123, 0.123, 0.123))))
+
+        edgelist = dataset.read_edgelist()
+
+        # make sure edgelist indices and feauture sorting match, nodes 0 and 1 should have no edges
+        self.assertEqual(edgelist.min(), 2)
+
+        
+    def test_full_preprocessing(self):
+        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="test", features=True)
+
+
+        # test that all pieces are there
+        for key in ["x", "edge_index", "test_mask", "train_mask", "val_mask"]:
+            self.assertTrue(key in dataset.data.keys)
+
+        # test that all edges are assigned to one of the sets
+        self.assertEqual(dataset.edge_index.shape[1], dataset.test_mask.sum() + dataset.train_mask.sum() + dataset.val_mask.sum())
+
+        # test that in preprocessing, the graph has been converted to undirected
+
+        self.assertEqual(dataset.edge_index.shape[1], 6)
 
 if __name__ == '__main__':
     unittest.main(warnings='ignore')
