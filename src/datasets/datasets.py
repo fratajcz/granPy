@@ -48,12 +48,13 @@ class McCallaDataset(GranPyDataset):
                           "jackson": "gold_standards/yeast/yeast_KDUnion.txt",
                           "shalek": "gold_standards/mDC/mDC_chipunion.txt",
                           "han": "gold_standards/hESC/hESC_chipunion.txt",
-                          "test": "../../src/tests/data/edgelist.csv"}
+                          "test": "edgelist.csv"}
         
         self.name2featuretable = {"zhao": "expression_data/normalized/zhao_GSE114952.csv.gz",
                                   "jackson": "expression_data/normalized/jackson_GSE125162.csv.gz",
                                   "shalek": "expression_data/normalized/shalek_GSE48968.csv.gz",
-                                  "han": "expression_data/normalized/han_GSE107552.csv.gz"}
+                                  "han": "expression_data/normalized/han_GSE107552.csv.gz",
+                                  "test": "node_features.csv.gz"}
         
         if name not in self.name2edgelist.keys():
             raise ValueError("Only datasets for zhao, jackson, shalek and han et al implemented.")
@@ -72,9 +73,10 @@ class McCallaDataset(GranPyDataset):
             zip_ref.extractall(self.raw_dir)
 
         if self.features:
-            filename = os.path.join(self.raw_dir, "gold_standard_datasets.zip")
+            filename = os.path.join(self.raw_dir, "expression_data.zip")
             print("Downloading features for {} from {} to {}".format(self.name, self.featuretableurl, filename))
-            # TODO: Add the feature download
+            with zipfile.ZipFile(filename, "r") as zip_ref:
+                zip_ref.extractall(self.raw_dir)
 
     @property
     def raw_file_names(self):
@@ -95,8 +97,14 @@ class McCallaDataset(GranPyDataset):
         edges = self.read_edgelist()
 
     def read_features(self) -> torch.FloatTensor:
-        # TODO: add feature processing
-        pass
+        feature_df = pd.read_csv(self.raw_paths[1], compression="gzip")
+        self.geneencoder = OrdinalEncoder()
+        feature_df["Cell"] = self.geneencoder.fit_transform(feature_df["Cell"].values.reshape(-1, 1)).flatten()
+
+        feature_df.set_index("Cell", inplace=True, drop=True)
+        feature_df.sort_index(inplace=True)
+
+        return torch.FloatTensor(feature_df.values)
 
     def read_edgelist(self) -> torch.LongTensor:
         edge_df = pd.read_csv(self.raw_paths[0], header=None, index_col=None, sep="\t")
@@ -108,7 +116,7 @@ class McCallaDataset(GranPyDataset):
             self.geneencoder = OrdinalEncoder()
             encoded_edges = self.geneencoder.fit_transform(edge_df.values.reshape(-1, 1)).reshape(old_shape)
 
-        return torch.LongTensor(encoded_edges)
+        return torch.LongTensor(encoded_edges).T
     
     @classmethod
     @property

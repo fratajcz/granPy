@@ -42,16 +42,24 @@ class McCallaDatasetDownloadTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
 class McCallaDatasetProcessTest(unittest.TestCase):
-    def setUp(self):
-        pathlib.Path("test_data").mkdir(parents=True, exist_ok=True)    
 
     def tearDown(self):
-        shutil.rmtree("test_data", ignore_errors=True)
+        shutil.rmtree("src/tests/data/processed", ignore_errors=True)
 
     def test_preprocess_edgelist(self):
-        dataset = McCallaDataset(root="test_data", hash="abc", name="test", features=False)
+        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="test", features=False)
+        edgelist = dataset.read_edgelist()
+        print(edgelist)
+        self.assertEqual(edgelist.shape, (2, 3))
 
-        self.assertTrue(os.path.isfile(os.path.join(dataset.raw_dir, dataset.raw_file_names[0])))
+    def test_preprocess_features(self):
+        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="test", features=True)
+        features = dataset.read_features()
+
+        # check if has right shape
+        self.assertEqual(features.shape, (8, 3))
+
+        # check if the node 
 
 if __name__ == '__main__':
     unittest.main(warnings='ignore')
