@@ -1,5 +1,6 @@
 import unittest
-from src.datasets.datasets import McCallaDataset
+from src.datasets.datasets import McCallaDataset, GranPyDataset
+from torch_geometric.data import Data
 import pathlib
 import shutil
 import os
@@ -74,15 +75,60 @@ class McCallaDatasetProcessTest(unittest.TestCase):
 
 
         # test that all pieces are there
-        for key in ["x", "edge_index", "test_mask", "train_mask", "val_mask"]:
-            self.assertTrue(key in dataset.data.keys)
-
-        # test that all edges are assigned to one of the sets
-        self.assertEqual(dataset.edge_index.shape[1], dataset.test_mask.sum() + dataset.train_mask.sum() + dataset.val_mask.sum())
+        for key in ["train_data", "val_data", "test_data", "pot_net"]:
+            self.assertTrue(hasattr(dataset, key))
 
         # test that in preprocessing, the graph has been converted to undirected
 
-        self.assertEqual(dataset.edge_index.shape[1], 6)
+        self.assertEqual(dataset.train_data.edge_index.shape[1], 6)
+        self.assertEqual(dataset.val_data.edge_index.shape[1], 6)
+        self.assertEqual(dataset.test_data.edge_index.shape[1], 8)
+
+
+
+class GranPyDatasetTest(unittest.TestCase):
+
+    def test_construct_pot_net(self):
+        edge_index = torch.LongTensor([[0, 1],
+                                       [3, 4]])
+        
+        pot_net = GranPyDataset.construct_pot_net(edge_index)
+
+        self.assertTrue(torch.equal(pot_net, torch.LongTensor([[0, 0, 1, 1],
+                                                               [3, 4, 3, 4]])))
+
+    def test_split_data(self):
+        edge_index = torch.tensor([[0, 1, 1, 2, 2, 3, 3, 4, 4, 5],
+                                   [1, 0, 2, 1, 3, 2, 4, 3, 5, 4]])
+
+        data = Data(edge_index=edge_index, num_nodes=10)
+
+        train_data, val_data, test_data = GranPyDataset.split_data(data, val_seed=1, test_seed=2, test_fraction=0.2, val_fraction=0.2)
+
+        self.assertEqual(train_data.edge_index.shape[1], 6)  # contains only train edges
+        self.assertEqual(val_data.edge_index.shape[1], 6)  # contains only train edges
+        self.assertEqual(test_data.edge_index.shape[1], 8)  # contains train and val edges
+
+    def test_split_data_same_test_different_val(self):
+        edge_index = torch.tensor([[0, 1, 1, 2, 2, 3, 3, 4, 4, 5],
+                                   [1, 0, 2, 1, 3, 2, 4, 3, 5, 4]])
+
+        data = Data(edge_index=edge_index, num_nodes=10)
+
+        train_data_1, val_data_1, test_data_1 = GranPyDataset.split_data(data, val_seed=1, test_seed=3, test_fraction=0.2, val_fraction=0.2)
+        train_data_2, val_data_2, test_data_2 = GranPyDataset.split_data(data, val_seed=2, test_seed=3, test_fraction=0.2, val_fraction=0.2)
+
+
+        test_edges_1 = test_data_1.edge_label_index[:, test_data_1.edge_label == 1]
+        test_edges_2 = test_data_2.edge_label_index[:, test_data_2.edge_label == 1]
+
+        self.assertTrue(torch.equal(test_edges_1, test_edges_2))
+
+        val_edges_1 = val_data_1.edge_label_index[:, val_data_1.edge_label == 1]
+        val_edges_2 = val_data_2.edge_label_index[:, val_data_2.edge_label == 1]
+
+        self.assertFalse(torch.equal(val_edges_1, val_edges_2))
 
 if __name__ == '__main__':
     unittest.main(warnings='ignore')
+

@@ -1,24 +1,28 @@
 from torch_geometric.data import InMemoryDataset, Data
 import torch_geometric.utils as pyg_utils
+from torch_geometric import seed_everything
+from torch_geometric.transforms import RandomLinkSplit
 import os
 import pandas as pd
-from sklearn.preprocessing import OrdinalEncoder, robust_scale
+from sklearn.preprocessing import OrdinalEncoder, minmax_scale
 from sklearn.model_selection import train_test_split
 import torch
 import numpy as np
+import random
 
 class GranPyDataset(InMemoryDataset):
     """ Abstract class that governs the joint behaviours of all datasets in granPy, such as datset naming an storage behaviour.
         Also governs the joint preprocessing details such as addition of inverse edges etc."""
-    def __init__(self, root, hash):
+    def __init__(self, root, hash, seed):
         self.root = root
         self.hash = hash
+        self.seed = seed
         self.canonical_test_seed = 1
         self.test_fraction = 0.2
-        self.val_fraction = 0.1
+        self.val_fraction = 0.2
         super().__init__(root)
 
-        self.data = torch.load(self.processed_paths[0])
+        self.train_data, self.val_data, self.test_data, self.pot_net = torch.load(self.processed_paths[0])
 
     @property
     def processed_dir(self) -> str:
@@ -44,48 +48,69 @@ class GranPyDataset(InMemoryDataset):
         edgelist = self._data.edge_index
         features = self._data.x
 
-        features = robust_scale(features, axis=0)
+        features = minmax_scale(features, axis=0)
 
         if pyg_utils.contains_self_loops(edgelist):
             edgelist = pyg_utils.remove_self_loops(edgelist)[0]
 
+        pot_net = self.construct_pot_net(edgelist)
+
         edgelist = pyg_utils.to_undirected(edgelist)
-
-        # calculating the masks this way introduces trivial examples. Problem?
-
-        train_mask, val_mask, test_mask = self.get_masks(edgelist.shape[1])
 
         data = Data(x=features,
                     edge_index=edgelist,
-                    train_mask=torch.BoolTensor(train_mask),
-                    val_mask=torch.BoolTensor(val_mask),
-                    test_mask=torch.BoolTensor(test_mask))
+                    num_nodes=features.shape[0])
+
+        train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.seed)
+
+        torch.save([train_data, val_data, test_data, pot_net], self.processed_paths[0])
+
+    @classmethod
+    def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None):
+
+        data = data.clone()
         
-        torch.save(data, self.processed_paths[0])
+        if val_seed is None:
+            val_seed = random.randint(0, 100)
 
+        if test_seed is None:
+            test_seed = random.randint(0, 100)
 
+        seed_everything(test_seed)
 
-    def get_masks(self, num_edges):
+        traintest_split = RandomLinkSplit(num_val=0, num_test=test_fraction, is_undirected=True, add_negative_train_samples=True)
+
+        trainval_data, _, test_data = traintest_split(data)
+
+        real_val_frac = val_fraction / (1 - test_fraction)
+
+        seed_everything(val_seed)
+
+        trainval_split = RandomLinkSplit(num_val=real_val_frac, num_test=0, is_undirected=True, add_negative_train_samples=False)
+
+        data.edge_index = trainval_data.edge_index
+
+        train_data, val_data, _ = trainval_split(data)
         
-        indices = np.array(range(num_edges))
+        return train_data, val_data, test_data
+
+    @classmethod
+    def construct_pot_net(self, edge_index: torch.LongTensor) -> torch.LongTensor:
+        """ Constructs the potential network between transcription factors and targets by connecting each TF to each target 
+            careful, has memory complexity of n*m where n is the number of tfs and m is the number of targets"""
+        tfs = edge_index[0, :].unique()
         
-        trainval_indices, test_indices = train_test_split(indices, test_size=self.test_fraction, random_state=self.canonical_test_seed)
+        targets = edge_index[1, :].unique()
 
-        real_val_frac = self.val_fraction / (1 - self.test_fraction)
+        tfs_repeated = tfs.repeat_interleave(repeats=targets.shape[0]).unsqueeze(0)
+        targets_tiled = targets.tile((tfs.shape[0],)).unsqueeze(0)
 
-        train_indices, val_indices = train_test_split(trainval_indices, test_size=real_val_frac)
-
-        train_mask = np.array([index in train_indices for index in indices])
-        val_mask = np.array([index in val_indices for index in indices])
-        test_mask = np.array([index in test_indices for index in indices])
-
-        return train_mask, val_mask, test_mask
-
-
+        return torch.vstack((tfs_repeated, targets_tiled))
+    
 
 class McCallaDataset(GranPyDataset):
     """ Governs the download and preprocessing of the four datasets from McCalla et al. """
-    def __init__(self, root, hash, name, features=True):
+    def __init__(self, root, hash, name, seed=None, features=True):
         self.features = features
         self.name = name
 
@@ -104,7 +129,7 @@ class McCallaDataset(GranPyDataset):
         if name not in self.name2edgelist.keys():
             raise ValueError("Only datasets for zhao, jackson, shalek and han et al implemented.")
         
-        super().__init__(root, hash)
+        super().__init__(root, hash, seed)
 
     def download(self) -> None:
         from urllib.request import urlretrieve
@@ -134,7 +159,7 @@ class McCallaDataset(GranPyDataset):
     def process(self) -> None:
 
         print("NO CACHE FOUND - Processing data...")
-    
+
         if self.features:
             features = self.read_features()
 
@@ -145,10 +170,8 @@ class McCallaDataset(GranPyDataset):
 
         self._data = Data(x=features,
                           edge_index=edges)
-        
+
         super().process()
-
-
 
     def read_features(self) -> torch.FloatTensor:
         feature_df = pd.read_csv(self.raw_paths[1], compression="gzip")
@@ -163,7 +186,6 @@ class McCallaDataset(GranPyDataset):
     def read_edgelist(self) -> torch.LongTensor:
         edge_df = pd.read_csv(self.raw_paths[0], header=None, index_col=None, sep="\t")
 
-        
         old_shape = edge_df.values.shape
 
         if hasattr(self, "geneencoder"):
