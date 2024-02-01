@@ -86,17 +86,17 @@ class GranPyDataset(InMemoryDataset):
 
         seed_everything(val_seed)
 
-        trainval_split = RandomLinkSplit(num_val=real_val_frac, num_test=0, is_undirected=True, add_negative_train_samples=False)
+        trainval_split = RandomLinkSplit(num_val=real_val_frac, num_test=0, is_undirected=True, add_negative_train_samples=True)
 
         data.edge_index = trainval_data.edge_index
 
         train_data, val_data, _ = trainval_split(data)
-        
+
         return train_data, val_data, test_data
 
     @classmethod
     def construct_pot_net(self, edge_index: torch.LongTensor) -> torch.LongTensor:
-        """ Constructs the potential network between transcription factors and targets by connecting each TF to each target 
+        """ Constructs the potential network between transcription factors and targets by connecting each TF to each target
             careful, has memory complexity of n*m where n is the number of tfs and m is the number of targets"""
         tfs = edge_index[0, :].unique()
         
@@ -118,13 +118,13 @@ class McCallaDataset(GranPyDataset):
                               "jackson": "gold_standards/yeast/yeast_KDUnion.txt",
                               "shalek": "gold_standards/mDC/mDC_chipunion.txt",
                               "han": "gold_standards/hESC/hESC_chipunion.txt",
-                              "test": "edgelist.csv"}
+                              "mccallatest": "edgelist.csv"}
         
         self.name2featuretable = {"zhao": "expression_data/normalized/zhao_GSE114952.csv.gz",
                                   "jackson": "expression_data/normalized/jackson_GSE125162.csv.gz",
                                   "shalek": "expression_data/normalized/shalek_GSE48968.csv.gz",
                                   "han": "expression_data/normalized/han_GSE107552.csv.gz",
-                                  "test": "node_features.csv.gz"}
+                                  "mccallatest": "node_features.csv.gz"}
         
         if name not in self.name2edgelist.keys():
             raise ValueError("Only datasets for zhao, jackson, shalek and han et al implemented.")
@@ -206,3 +206,36 @@ class McCallaDataset(GranPyDataset):
     @property
     def featuretableurl(self):
         return "https://zenodo.org/records/5909090/files/expression_data.zip"
+    
+    @classmethod
+    @property
+    def names(self):
+        return ["zhao", "jackson", "shalek", "han", "mccallatest"]
+
+
+class DatasetBootstrapper:
+    def __init__(self, opts, hash):
+        import src.datasets as datasets
+
+        self.hash = hash
+        self.opts = opts
+        name = opts.dataset
+        names = []
+        self.datasetclass = None
+
+        for possible_class in map(datasets.__dict__.get, datasets.__all__):
+            try:
+                names.extend(possible_class.names)
+                if name in possible_class.names:
+                    if self.datasetclass is None:
+                        self.datasetclass = possible_class
+                    else:
+                        raise ValueError("Found at least to implementations of dataset with name {}: {} and {}".format(name, possible_class, self.datasetclass))
+            except AttributeError:
+                continue
+
+        if self.datasetclass is None:
+            raise ValueError("Found no class that implements a dataset with the name {}. Did you mean one of the following: {}".format(name, names))
+
+    def get_dataset(self):
+        return self.datasetclass(root=self.opts.root, hash=self.hash, name=self.opts.dataset)

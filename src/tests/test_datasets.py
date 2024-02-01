@@ -1,11 +1,12 @@
 import unittest
-from src.datasets.datasets import McCallaDataset, GranPyDataset
+from src.datasets.datasets import McCallaDataset, GranPyDataset, DatasetBootstrapper
 from torch_geometric.data import Data
 import pathlib
 import shutil
 import os
 import requests
 import torch
+import dataclasses
 
 class McCallaDatasetDownloadTest(unittest.TestCase):
     def setUp(self):
@@ -49,13 +50,13 @@ class McCallaDatasetProcessTest(unittest.TestCase):
         shutil.rmtree("src/tests/data/processed", ignore_errors=True)
 
     def test_preprocess_edgelist(self):
-        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="test", features=False)
+        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="mccallatest", features=False)
         edgelist = dataset.read_edgelist()
         print(edgelist)
         self.assertEqual(edgelist.shape, (2, 3))
 
     def test_preprocess_features(self):
-        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="test", features=True)
+        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="mccallatest", features=True)
         features = dataset.read_features()
 
         # check if has right shape
@@ -71,7 +72,7 @@ class McCallaDatasetProcessTest(unittest.TestCase):
 
         
     def test_full_preprocessing(self):
-        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="test", features=True)
+        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="mccallatest", features=True)
 
 
         # test that all pieces are there
@@ -83,7 +84,6 @@ class McCallaDatasetProcessTest(unittest.TestCase):
         self.assertEqual(dataset.train_data.edge_index.shape[1], 6)
         self.assertEqual(dataset.val_data.edge_index.shape[1], 6)
         self.assertEqual(dataset.test_data.edge_index.shape[1], 8)
-
 
 
 class GranPyDatasetTest(unittest.TestCase):
@@ -128,6 +128,41 @@ class GranPyDatasetTest(unittest.TestCase):
         val_edges_2 = val_data_2.edge_label_index[:, val_data_2.edge_label == 1]
 
         self.assertFalse(torch.equal(val_edges_1, val_edges_2))
+
+
+class DatasetBootstrapperTest(unittest.TestCase):
+
+    def tearDown(self):
+        shutil.rmtree("src/tests/data/processed", ignore_errors=True)
+
+    def test_raise_valueerror_for_nonsense_name(self):
+        @dataclasses.dataclass
+        class opts:
+            root = "src/tests/data/"
+            dataset = "nosuchdataset"
+
+        self.assertRaises(ValueError, DatasetBootstrapper, opts=opts(), hash="abc")
+
+    def test_finds_name(self):
+        @dataclasses.dataclass
+        class opts:
+            root = "src/tests/data/"
+            dataset = "mccallatest"
+
+        bootstrapper = DatasetBootstrapper(opts, hash="abs")
+
+        self.assertEqual(bootstrapper.datasetclass, McCallaDataset)
+
+    def test_can_initialize(self):
+        @dataclasses.dataclass
+        class opts:
+            root = "src/tests/data/"
+            dataset = "mccallatest"
+
+        dataset = DatasetBootstrapper(opts, hash="abs").get_dataset()
+
+        self.assertTrue(isinstance(dataset, McCallaDataset))
+
 
 if __name__ == '__main__':
     unittest.main(warnings='ignore')
