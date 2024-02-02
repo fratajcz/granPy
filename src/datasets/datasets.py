@@ -48,7 +48,7 @@ class GranPyDataset(InMemoryDataset):
         edgelist = self._data.edge_index
         features = self._data.x
 
-        features = minmax_scale(features, axis=0)
+        features = torch.FloatTensor(minmax_scale(features, axis=0))
 
         if pyg_utils.contains_self_loops(edgelist):
             edgelist = pyg_utils.remove_self_loops(edgelist)[0]

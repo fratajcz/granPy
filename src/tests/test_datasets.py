@@ -52,7 +52,6 @@ class McCallaDatasetProcessTest(unittest.TestCase):
     def test_preprocess_edgelist(self):
         dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="mccallatest", features=False)
         edgelist = dataset.read_edgelist()
-        print(edgelist)
         self.assertEqual(edgelist.shape, (2, 3))
 
     def test_preprocess_features(self):
@@ -84,6 +83,8 @@ class McCallaDatasetProcessTest(unittest.TestCase):
         self.assertEqual(dataset.train_data.edge_index.shape[1], 6)
         self.assertEqual(dataset.val_data.edge_index.shape[1], 6)
         self.assertEqual(dataset.test_data.edge_index.shape[1], 8)
+
+        self.assertTrue(isinstance(dataset.train_data.x, torch.FloatTensor))
 
 
 class GranPyDatasetTest(unittest.TestCase):
