@@ -13,13 +13,13 @@ import random
 class GranPyDataset(InMemoryDataset):
     """ Abstract class that governs the joint behaviours of all datasets in granPy, such as datset naming an storage behaviour.
         Also governs the joint preprocessing details such as addition of inverse edges etc."""
-    def __init__(self, root, hash, seed):
+    def __init__(self, root, opts, hash):
         self.root = root
         self.hash = hash
-        self.seed = seed
-        self.canonical_test_seed = 1
-        self.test_fraction = 0.2
-        self.val_fraction = 0.2
+        self.val_seed = opts.val_seed
+        self.canonical_test_seed = opts.canonical_test_seed
+        self.test_fraction = opts.test_fraction
+        self.val_fraction = opts.val_fraction
         super().__init__(root)
 
         self.train_data, self.val_data, self.test_data, self.pot_net = torch.load(self.processed_paths[0])
@@ -61,7 +61,7 @@ class GranPyDataset(InMemoryDataset):
                     edge_index=edgelist,
                     num_nodes=features.shape[0])
 
-        train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.seed)
+        train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed)
 
         torch.save([train_data, val_data, test_data, pot_net], self.processed_paths[0])
 
@@ -110,9 +110,9 @@ class GranPyDataset(InMemoryDataset):
 
 class McCallaDataset(GranPyDataset):
     """ Governs the download and preprocessing of the four datasets from McCalla et al. """
-    def __init__(self, root, hash, name, seed=None, features=True):
+    def __init__(self, root, opts, hash, features=True):
         self.features = features
-        self.name = name
+        self.name = opts.dataset
 
         self.name2edgelist = {"zhao": "gold_standards/mESC/mESC_chipunion.txt",
                               "jackson": "gold_standards/yeast/yeast_KDUnion.txt",
@@ -126,10 +126,10 @@ class McCallaDataset(GranPyDataset):
                                   "han": "expression_data/normalized/han_GSE107552.csv.gz",
                                   "mccallatest": "node_features.csv.gz"}
         
-        if name not in self.name2edgelist.keys():
+        if self.name not in self.name2edgelist.keys():
             raise ValueError("Only datasets for zhao, jackson, shalek and han et al implemented.")
         
-        super().__init__(root, hash, seed)
+        super().__init__(root, opts, hash)
 
     def download(self) -> None:
         from urllib.request import urlretrieve
@@ -238,4 +238,4 @@ class DatasetBootstrapper:
             raise ValueError("Found no class that implements a dataset with the name {}. Did you mean one of the following: {}".format(name, names))
 
     def get_dataset(self):
-        return self.datasetclass(root=self.opts.root, hash=self.hash, name=self.opts.dataset)
+        return self.datasetclass(root=self.opts.root, hash=self.hash, opts=self.opts)

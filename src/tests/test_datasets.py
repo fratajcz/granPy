@@ -20,22 +20,61 @@ class McCallaDatasetDownloadTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_download_han(self):
-        dataset = McCallaDataset(root="test_data", hash="abc", name="han", features=False)
+         
+        @dataclasses.dataclass
+        class opts:
+            root = "test_data"
+            dataset = "han"
+            val_seed = 2
+            canonical_test_seed = 1
+            val_fraction = 0.2
+            test_fraction = 0.2
+            
+
+        dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
 
         self.assertTrue(os.path.isfile(os.path.join(dataset.raw_dir, dataset.raw_file_names[0])))
 
     def test_download_shalek(self):
-        dataset = McCallaDataset(root="test_data", hash="abc", name="shalek", features=False)
+
+        @dataclasses.dataclass
+        class opts:
+            root = "test_data"
+            dataset = "shalek"
+            val_seed = 2
+            canonical_test_seed = 1
+            val_fraction = 0.2
+            test_fraction = 0.2
+
+        dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
 
         self.assertTrue(os.path.isfile(os.path.join(dataset.raw_dir, dataset.raw_file_names[0])))
 
     def test_download_jackson(self):
-        dataset = McCallaDataset(root="test_data", hash="abc", name="jackson", features=False)
+        @dataclasses.dataclass
+        class opts:
+            root = "test_data"
+            dataset = "jackson"
+            val_seed = 2
+            canonical_test_seed = 1
+            val_fraction = 0.2
+            test_fraction = 0.2
+
+        dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
 
         self.assertTrue(os.path.isfile(os.path.join(dataset.raw_dir, dataset.raw_file_names[0])))
 
     def test_download_zhao(self):
-        dataset = McCallaDataset(root="test_data", hash="abc", name="zhao", features=False)
+        @dataclasses.dataclass
+        class opts:
+            root = "test_data"
+            dataset = "zhao"
+            val_seed = 2
+            canonical_test_seed = 1
+            val_fraction = 0.2
+            test_fraction = 0.2
+
+        dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
 
         self.assertTrue(os.path.isfile(os.path.join(dataset.raw_dir, dataset.raw_file_names[0])))
 
@@ -44,18 +83,38 @@ class McCallaDatasetDownloadTest(unittest.TestCase):
         response = requests.head(McCallaDataset.featuretableurl)
         self.assertEqual(response.status_code, 200)
 
+
 class McCallaDatasetProcessTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree("src/tests/data/processed", ignore_errors=True)
 
     def test_preprocess_edgelist(self):
-        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="mccallatest", features=False)
+        @dataclasses.dataclass
+        class opts:
+            root = "test_data"
+            dataset = "mccallatest"
+            val_seed = 2
+            canonical_test_seed = 1
+            val_fraction = 0.2
+            test_fraction = 0.2
+
+        dataset = McCallaDataset(root="src/tests/data/", hash="abc", opts=opts(), features=False)
         edgelist = dataset.read_edgelist()
-        self.assertEqual(edgelist.shape, (2, 3))
+        self.assertEqual(edgelist.shape, (2, 5))
 
     def test_preprocess_features(self):
-        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="mccallatest", features=True)
+
+        @dataclasses.dataclass
+        class opts:
+            root = "test_data"
+            dataset = "mccallatest"
+            val_seed = 2
+            canonical_test_seed = 1
+            val_fraction = 0.2
+            test_fraction = 0.2
+
+        dataset = McCallaDataset(root="src/tests/data/", hash="abc", opts=opts(), features=True)
         features = dataset.read_features()
 
         # check if has right shape
@@ -71,8 +130,16 @@ class McCallaDatasetProcessTest(unittest.TestCase):
 
         
     def test_full_preprocessing(self):
-        dataset = McCallaDataset(root="src/tests/data/", hash="abc", name="mccallatest", features=True)
+        @dataclasses.dataclass
+        class opts:
+            root = "test_data"
+            dataset = "mccallatest"
+            val_seed = 2
+            canonical_test_seed = 1
+            val_fraction = 0.2
+            test_fraction = 0.2
 
+        dataset = McCallaDataset(root="src/tests/data/", hash="abc", opts=opts(), features=True)
 
         # test that all pieces are there
         for key in ["train_data", "val_data", "test_data", "pot_net"]:
@@ -118,7 +185,6 @@ class GranPyDatasetTest(unittest.TestCase):
 
         train_data_1, val_data_1, test_data_1 = GranPyDataset.split_data(data, val_seed=1, test_seed=3, test_fraction=0.2, val_fraction=0.2)
         train_data_2, val_data_2, test_data_2 = GranPyDataset.split_data(data, val_seed=2, test_seed=3, test_fraction=0.2, val_fraction=0.2)
-
 
         test_edges_1 = test_data_1.edge_label_index[:, test_data_1.edge_label == 1]
         test_edges_2 = test_data_2.edge_label_index[:, test_data_2.edge_label == 1]
