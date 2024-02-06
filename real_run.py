@@ -8,7 +8,7 @@ class opts:
     canonical_test_seed: int = 1
     val_fraction: float = 0.2
     test_fraction: float = 0.2
-    n_conv_layers: int = 0
+    n_conv_layers: int = 1
     activation_layer: str = "ReLU"
     dropout_ratio: float = 0.5
     mplayer: str = "GCNConv"
@@ -17,7 +17,7 @@ class opts:
     latent_dim: int = 32
     layer_ratio: int = 10
     root: str = "/mnt/storage/granpy/data"
-    dataset: str = "jackson"
+    dataset: str = "shalek"
     model_path: str = "/mnt/storage/granpy/models/"
     lr: float = 1e-3
     es_patience: int = 10

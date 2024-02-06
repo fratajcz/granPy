@@ -99,23 +99,22 @@ class GranPyDataset(InMemoryDataset):
         """ Constructs the potential network between transcription factors and targets by connecting each TF to each target
             careful, has memory complexity of n*m where n is the number of tfs and m is the number of targets"""
         tfs = edge_index[0, :].unique()
-        
+
         targets = edge_index[1, :].unique()
 
         tfs_repeated = tfs.repeat_interleave(repeats=targets.shape[0]).unsqueeze(0)
         targets_tiled = targets.tile((tfs.shape[0],)).unsqueeze(0)
 
-        return torch.vstack((tfs_repeated, targets_tiled))
-    
+        return pyg_utils.remove_self_loops(torch.vstack((tfs_repeated, targets_tiled)))[0]
+
     def to(self, device):
-        #for data_name in ["train_data", "val_data", "test_data", "pot_net"]:
+        # for data_name in ["train_data", "val_data", "test_data", "pot_net"]:
         #    self.__setattr__(data_name, self.__getattr__(data_name).to(device))
         self.train_data = self.train_data.to(device)
         self.test_data = self.test_data.to(device)
         self.val_data = self.val_data.to(device)
         self.pot_net = self.pot_net.to(device)
-    
-            
+
 
 class McCallaDataset(GranPyDataset):
     """ Governs the download and preprocessing of the four datasets from McCalla et al. """
@@ -239,7 +238,7 @@ class DatasetBootstrapper:
                     if self.datasetclass is None:
                         self.datasetclass = possible_class
                     else:
-                        raise ValueError("Found at least to implementations of dataset with name {}: {} and {}".format(name, possible_class, self.datasetclass))
+                        raise ValueError("Found at least two implementations of dataset with name {}: {} and {}".format(name, possible_class, self.datasetclass))
             except AttributeError:
                 continue
 
