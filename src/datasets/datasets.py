@@ -107,6 +107,15 @@ class GranPyDataset(InMemoryDataset):
 
         return torch.vstack((tfs_repeated, targets_tiled))
     
+    def to(self, device):
+        #for data_name in ["train_data", "val_data", "test_data", "pot_net"]:
+        #    self.__setattr__(data_name, self.__getattr__(data_name).to(device))
+        self.train_data = self.train_data.to(device)
+        self.test_data = self.test_data.to(device)
+        self.val_data = self.val_data.to(device)
+        self.pot_net = self.pot_net.to(device)
+    
+            
 
 class McCallaDataset(GranPyDataset):
     """ Governs the download and preprocessing of the four datasets from McCalla et al. """

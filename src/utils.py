@@ -64,8 +64,6 @@ class opts:
 
 def get_hash(opts):
     import hashlib
-    import json
-    from dataclasses import asdict
     # inspired by https://death.andgravity.com/stable-hashing
     """
     fields = dataclasses.fields(opts)
@@ -81,4 +79,6 @@ def get_hash(opts):
                 continue
             rv[field.name] = value
     """
-    return hashlib.md5(json.dumps(asdict(opts)).encode()).digest().hex()
+    m = hashlib.blake2b(digest_size=5)
+    m.update(str(opts.__dict__).encode("utf-8"))
+    return m.hexdigest()

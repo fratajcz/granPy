@@ -5,11 +5,12 @@ import torch
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
 import torch.optim.lr_scheduler as lr_scheduler
-from torch_geometric.utils import to_undirected
+from torch_geometric.utils import to_undirected, structured_negative_sampling
 import os
 import sklearn.metrics as skmetrics
 import copy
 from tqdm import tqdm
+from torch.nn.functional import sigmoid
 
 class Experiment:
     def __init__(self, opts):
@@ -20,7 +21,9 @@ class Experiment:
 
         self.dataset = DatasetBootstrapper(opts, hash=self.hash).get_dataset()
 
-        self.model = GAE_Kipf(input_dim=self.dataset.train_data.x.shape[1], opts=opts)
+        self.dataset.to(self.devices[0])
+
+        self.model = GAE_Kipf(input_dim=self.dataset.train_data.x.shape[1], opts=opts).to(self.devices[0])
 
         self.loss_function = BCEWithLogitsLoss()
 
@@ -105,7 +108,8 @@ class Experiment:
         pos_out = self.model.decode(z, data.edge_index)
 
         # TODO adapt this step to allow scoring against pot_net
-        neg_out = self.model.decode(z, to_undirected(data.edge_label_index[:, data.edge_label == 0]))
+        neg_edges = self.get_negative_edges(data)
+        neg_out = self.model.decode(z, neg_edges)
 
         pos_loss = self.loss_function(pos_out, torch.ones_like(pos_out))
         neg_loss = self.loss_function(neg_out, torch.zeros_like(neg_out))
@@ -152,8 +156,58 @@ class Experiment:
 
         return values
     
+    def get_negative_edges(self, data):
+        if self.opts.negative_sampling == "structured":
+            result = structured_negative_sampling(data.edge_index, num_nodes=data.x.shape[0],
+                                                  contains_neg_self_loops=False)
+            return to_undirected(torch.vstack((result[0], result[2])))
+        else:
+            return to_undirected(data.edge_label_index[:, data.edge_label == 0])
+    
+    @property
+    def devices(self):
+        cuda = self.opts.cuda
+        if cuda:
+            try:
+                assert torch.cuda.is_available()
+            except AssertionError:
+                if cuda == "auto":
+                    print(
+                        "CUDA set to auto, no CUDA device detected, setting to CPU")
+                    devices = ["cpu"]
+                    return devices
+                else:
+                    raise ValueError(
+                        "Specified that job should be run on CUDA, but no CUDA devices are available. Aborting...")
+            try:
+                available_cuda_devices = ["cuda:{}".format(
+                    device) for device in range(torch.cuda.device_count())]
+                if cuda is True:
+                    devices = available_cuda_devices
+                elif cuda == "auto":
+                    devices = available_cuda_devices
+                elif isinstance(cuda, str):
+                    devices = [cuda]
+                elif isinstance(cuda, list):
+                    devices = cuda
 
-class CVWrapper:
+                for device in devices:
+                    assert isinstance(device, str)
+                    assert device.startswith("cuda:")
+                    assert device in available_cuda_devices
+
+            except AssertionError:
+                raise ValueError("Specified cuda device(s) {} not in available cuda device(s): {}. Check Spelling or Numbering".format(
+                    cuda, available_cuda_devices))
+        else:
+            print(
+                "CUDA is set to {}, using cpu as fallback".format(cuda))
+            devices = ["cpu"]
+
+        return devices
+    
+
+class ExperimentArray:
     def __init__(self, opts):
         self.opts = opts
 

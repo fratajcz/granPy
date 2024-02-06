@@ -4,12 +4,12 @@ from torch_geometric.nn import Sequential
 
 class GAE_Encoder(torch.nn.Module):
     def __init__(self, input_dim, opts):
-        assert opts.n_conv_layers in [1, 2, 3]
+        assert opts.n_conv_layers in [0, 1, 2, 3]
         assert opts.layer_ratio >= 1
 
         super(GAE_Encoder, self).__init__()
         self.n_conv_layers = opts.n_conv_layers
-        hidden1 = int(opts.latent_dim*pow(opts.layer_ratio, opts.n_conv_layers-1))
+        hidden1 = int(opts.latent_dim*pow(opts.layer_ratio, max(opts.n_conv_layers-1, 0)))
 
         layers = torch.nn.ModuleList()
         flow = []
@@ -17,8 +17,15 @@ class GAE_Encoder(torch.nn.Module):
         layers.append(get_layer("Dropout")(opts.dropout_ratio))
         flow.append("x -> x")
 
-        layers.append(get_mp_layer(opts.mplayer)(input_dim, hidden1, *opts.mplayer_args, **opts.mplayer_kwargs))
-        flow.append("x, edge_index -> x")
+        if opts.n_conv_layers == 0:
+            layers.append(get_layer("Linear")(input_dim, hidden1))
+            flow.append("x -> x")
+
+        else:
+            layers.append(get_mp_layer(opts.mplayer)(input_dim, hidden1, *opts.mplayer_args, **opts.mplayer_kwargs))
+            flow.append("x, edge_index -> x")
+
+
 
         if opts.n_conv_layers >= 2:
             layers.append(get_layer(opts.activation_layer)())
