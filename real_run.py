@@ -2,13 +2,14 @@ import dataclasses
 from training import TrainingPipeline
 from typing import List, Dict
 
+
 @dataclasses.dataclass
 class opts:
     val_seed: int = 2
     canonical_test_seed: int = 1
     val_fraction: float = 0.2
     test_fraction: float = 0.2
-    n_conv_layers: int = 1
+    n_conv_layers: int = 2
     activation_layer: str = "ReLU"
     dropout_ratio: float = 0.5
     mplayer: str = "GCNConv"
@@ -26,9 +27,10 @@ class opts:
     val_metric: str = "average_precision_score"
     test_metrics: List[str] = dataclasses.field(default_factory=list)
     n_folds: int = 5
-    epochs: int = 200
+    epochs: int = 500
     cuda: bool = True
-    negative_sampling: str = "structured"
+    negative_sampling: str = "pot_net"
+    score_batched = True
 
 _opts = opts()
 

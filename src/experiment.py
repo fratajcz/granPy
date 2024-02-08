@@ -5,12 +5,13 @@ import torch
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
 import torch.optim.lr_scheduler as lr_scheduler
-from torch_geometric.utils import to_undirected, structured_negative_sampling
+from torch_geometric.utils import to_undirected, structured_negative_sampling, k_hop_subgraph, coalesce, is_undirected
 import os
 import sklearn.metrics as skmetrics
 import copy
 from tqdm import tqdm
 from torch.nn.functional import sigmoid
+import numpy as np
 
 class Experiment:
     def __init__(self, opts):
@@ -61,6 +62,9 @@ class Experiment:
 
         self.eval_step(target="test")
 
+        if self.opts.score_batched:
+            self.test_performance = self.score_batched(self.dataset.test_data, self.dataset.pot_net, self.opts.test_metrics)
+
         return self.test_performance
 
     def train_step(self):
@@ -107,7 +111,6 @@ class Experiment:
 
         pos_out = self.model.decode(z, data.edge_index)
 
-        # TODO adapt this step to allow scoring against pot_net
         neg_edges = self.get_negative_edges(data)
         neg_out = self.model.decode(z, neg_edges)
 
@@ -161,9 +164,60 @@ class Experiment:
             result = structured_negative_sampling(data.edge_index, num_nodes=data.x.shape[0],
                                                   contains_neg_self_loops=False)
             return to_undirected(torch.vstack((result[0], result[2])))
+        elif self.opts.negative_sampling == "pot_net":
+            # todo: split this into train, test and val as well
+            return self.dataset.pot_net[0]
         else:
             return to_undirected(data.edge_label_index[:, data.edge_label == 0])
+        
+    def score_batched(self, data, pot_net, metrics):
+        self.model.eval()
+        self.model.zero_grad()
+
+        z = self.model.encode(data.x, data.edge_index)
+
+        directed_pos_edges, pos_edges_batch_index = self.batch_pos_edges_by_tf(data.edge_label_index[:, data.edge_label == 1], pot_net)
+
+        pos_out = self.model.decode(z, directed_pos_edges)
+        neg_out = self.model.decode(z, pot_net[0])
+
+        total_indices = torch.cat((pos_edges_batch_index, pot_net[1])).unique().tolist()
+
+        values = {metric: [] for metric in metrics}
+        for tf in total_indices:
+            pos = pos_out[pos_edges_batch_index == tf]
+            neg = neg_out[pot_net[1] == tf]
+
+            if len(pos) == 0 or len(neg) == 0:
+                continue
+
+            scores = torch.cat((pos, neg)).detach().cpu().numpy()
+            labels = torch.cat((torch.ones_like(pos), torch.zeros_like(neg))).cpu().numpy()
+
+            for metric in metrics:
+                function = getattr(skmetrics, metric)
+                values[metric].append(function(y_true=labels, y_score=scores))
+
+        return {metric: np.mean(list_of_values) for metric, list_of_values in values.items()}
+
+    @classmethod
+    def batch_pos_edges_by_tf(self, edge_index, pot_net):
+
+        pos_edges = edge_index.clone()
+
+        if not is_undirected(pos_edges):
+            pos_edges = to_undirected(pos_edges)
+
+        pos_edges = coalesce(pos_edges)
+
+        _, directed_pos_edges, _, _ = k_hop_subgraph(pot_net[2], 1, pos_edges, relabel_nodes=False, directed=True, flow="target_to_source")
+
+        pos_edges_tfs, num_pos_edges_per_tf = directed_pos_edges[0, :].unique(return_counts=True)
     
+        pos_edges_batch_index = pos_edges_tfs.repeat_interleave(num_pos_edges_per_tf)
+
+        return directed_pos_edges, pos_edges_batch_index
+
     @property
     def devices(self):
         cuda = self.opts.cuda

@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 import torch
 import numpy as np
 import random
+from typing import Tuple
 
 class GranPyDataset(InMemoryDataset):
     """ Abstract class that governs the joint behaviours of all datasets in granPy, such as datset naming an storage behaviour.
@@ -53,15 +54,13 @@ class GranPyDataset(InMemoryDataset):
         if pyg_utils.contains_self_loops(edgelist):
             edgelist = pyg_utils.remove_self_loops(edgelist)[0]
 
-        pot_net = self.construct_pot_net(edgelist)
-
-        edgelist = pyg_utils.to_undirected(edgelist)
-
         data = Data(x=features,
-                    edge_index=edgelist,
+                    edge_index=pyg_utils.to_undirected(edgelist),
                     num_nodes=features.shape[0])
 
         train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed)
+
+        pot_net = self.construct_pot_net(edgelist)
 
         torch.save([train_data, val_data, test_data, pot_net], self.processed_paths[0])
 
@@ -95,17 +94,37 @@ class GranPyDataset(InMemoryDataset):
         return train_data, val_data, test_data
 
     @classmethod
-    def construct_pot_net(self, edge_index: torch.LongTensor) -> torch.LongTensor:
+    def construct_pot_net(self, all_pos_edges: torch.LongTensor) -> Tuple[torch.LongTensor, torch.LongTensor]:
         """ Constructs the potential network between transcription factors and targets by connecting each TF to each target
-            careful, has memory complexity of n*m where n is the number of tfs and m is the number of targets"""
-        tfs = edge_index[0, :].unique()
+            careful, has memory complexity of n*m where n is the number of tfs and m is the number of targets
 
-        targets = edge_index[1, :].unique()
+            Returns only negative edges and a tf mask by which the edges can be batched to their tfs.
+            """
+
+        all_pos_edges = pyg_utils.coalesce(all_pos_edges)
+
+        tfs, num_targets_per_tf = all_pos_edges[0, :].unique(return_counts=True)
+
+        targets = all_pos_edges[1, :].unique()
 
         tfs_repeated = tfs.repeat_interleave(repeats=targets.shape[0]).unsqueeze(0)
+
+        tf_batches = tfs.repeat_interleave(repeats=targets.shape[0])
+
         targets_tiled = targets.tile((tfs.shape[0],)).unsqueeze(0)
 
-        return pyg_utils.remove_self_loops(torch.vstack((tfs_repeated, targets_tiled)))[0]
+        all_pot_net_edges, tf_batches = pyg_utils.remove_self_loops(torch.vstack((tfs_repeated, targets_tiled)), edge_attr=tf_batches)
+        all_pot_net_edges, tf_batches = pyg_utils.coalesce(all_pot_net_edges, edge_attr=tf_batches)
+
+        mask = torch.cat((tf_batches, -1 * torch.ones((all_pos_edges.shape[1],))))
+        reduced_edges, pos_and_batch_mask = pyg_utils.coalesce(torch.hstack((all_pot_net_edges, all_pos_edges)), mask, reduce="mul")
+
+        pos_mask = pos_and_batch_mask > 0
+
+        neg_edges = reduced_edges[:, pos_mask]
+        batch_mask = pos_and_batch_mask[pos_mask]
+
+        return [neg_edges, batch_mask.abs(), tfs]
 
     def to(self, device):
         # for data_name in ["train_data", "val_data", "test_data", "pot_net"]:
@@ -113,7 +132,9 @@ class GranPyDataset(InMemoryDataset):
         self.train_data = self.train_data.to(device)
         self.test_data = self.test_data.to(device)
         self.val_data = self.val_data.to(device)
-        self.pot_net = self.pot_net.to(device)
+        self.pot_net[0] = self.pot_net[0].to(device)
+        self.pot_net[1] = self.pot_net[1].to(device)
+        self.pot_net[2] = self.pot_net[2].to(device)
 
 
 class McCallaDataset(GranPyDataset):

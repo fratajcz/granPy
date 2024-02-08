@@ -160,10 +160,13 @@ class GranPyDatasetTest(unittest.TestCase):
         edge_index = torch.LongTensor([[0, 1],
                                        [3, 4]])
         
+        
+        
         pot_net = GranPyDataset.construct_pot_net(edge_index)
 
-        self.assertTrue(torch.equal(pot_net, torch.LongTensor([[0, 0, 1, 1],
-                                                               [3, 4, 3, 4]])))
+        self.assertTrue(torch.equal(pot_net[0], torch.LongTensor([[0, 1],
+                                                                  [4, 3]])))
+        self.assertTrue(torch.equal(pot_net[1], torch.LongTensor([0, 1])))
 
     def test_split_data(self):
         edge_index = torch.tensor([[0, 1, 1, 2, 2, 3, 3, 4, 4, 5],
