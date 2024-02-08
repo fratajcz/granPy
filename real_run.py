@@ -9,7 +9,7 @@ class opts:
     canonical_test_seed: int = 1
     val_fraction: float = 0.2
     test_fraction: float = 0.2
-    n_conv_layers: int = 2
+    n_conv_layers: int = 3
     activation_layer: str = "ReLU"
     dropout_ratio: float = 0.5
     mplayer: str = "GCNConv"
