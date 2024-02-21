@@ -12,6 +12,8 @@ import copy
 from tqdm import tqdm
 from torch.nn.functional import sigmoid
 import numpy as np
+import wandb
+import uuid
 
 class Experiment:
     def __init__(self, opts):
@@ -46,9 +48,16 @@ class Experiment:
         self.test_performance = None
 
     def run(self):
-        try:
-            self.load_model()
-        except FileNotFoundError:
+        
+        if self.opts.cache_model:
+            try: self.load_model()
+            except FileNotFoundError:
+                self.opts.cache_model = False
+        if not self.opts.cache_model:
+            if self.opts.wandb_tracking: 
+                wandb.init(project=self.opts.wandb_project, entity="scialdonelab", save_code=True, group=self.opts.wandb_group,
+                           config=wandb.helper.parse_config(self.opts, exclude=('root', 'model_path', 'wandb_tracking', 'wandb_project', 'wandb_save_model', 'wandb_group')))
+            
             for epoch in (pbar := tqdm(range(self.opts.epochs))):
                 pbar.set_description("Best {}: {}".format(self.opts.val_metric, self.best_val_performance))
                 self.train_step()
@@ -64,6 +73,11 @@ class Experiment:
 
         if self.opts.score_batched:
             self.test_performance = self.score_batched(self.dataset.test_data, self.dataset.pot_net, self.opts.test_metrics)
+        if self.opts.wandb_tracking and wandb.run is not None:
+            if self.opts.wandb_save_model:
+                wandb.run.log_model(path=os.path.join(self.opts.model_path, self.hash + ".pt"))
+            wandb.log(self.test_performance)
+            wandb.finish()
 
         return self.test_performance
 
@@ -78,6 +92,10 @@ class Experiment:
         loss.backward()
 
         self.optimizer.step()
+        
+        if self.opts.wandb_tracking: wandb.log({"train_loss": loss}, commit=False)
+        
+        return loss
 
     def eval_step(self, target):
         self.model.eval()
@@ -90,15 +108,16 @@ class Experiment:
 
         if target == "val":
             value = self.get_metric(pos_out, neg_out, [self.opts.val_metric])[self.opts.val_metric]
+            if self.opts.wandb_tracking: wandb.log({("val_" + self.opts.val_metric): value, "val_loss": loss}, commit=True)
             if self.is_best_val_performance(value):
                 self.best_val_performance = value
                 self.save_model()
                 did_improve = True
             self.lrscheduler.step(loss)
+            return did_improve
         elif target == "test":
             self.test_performance = self.get_metric(pos_out, neg_out, self.opts.test_metrics)
-            did_improve = None
-        return did_improve
+        return
     
     def is_best_val_performance(self, value):
         if self.opts.val_mode == "max":
@@ -264,6 +283,7 @@ class Experiment:
 class ExperimentArray:
     def __init__(self, opts):
         self.opts = opts
+        self.opts.wandb_group = uuid.uuid4().hex
 
         self.val_seeds = range(opts.val_seed, opts.val_seed + opts.n_folds)
         self.performance_reports = None
