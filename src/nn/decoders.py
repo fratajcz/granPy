@@ -6,7 +6,7 @@ class InnerProductDecoder(torch.nn.Module):
         super(InnerProductDecoder, self).__init__()
 
     def forward(self, z, edge_index, sigmoid=True):
-        value = (z[edge_index[0]] * z[edge_index[1]]).sum(dim=1)
+        value = (z[edge_index[0, :]] * z[edge_index[1, :]]).sum(dim=1)
         return torch.sigmoid(value) if sigmoid else value
 
 

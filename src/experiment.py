@@ -5,7 +5,7 @@ import torch
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
 import torch.optim.lr_scheduler as lr_scheduler
-from torch_geometric.utils import to_undirected, structured_negative_sampling, k_hop_subgraph, coalesce, is_undirected
+from torch_geometric.utils import to_undirected, structured_negative_sampling, k_hop_subgraph, coalesce, is_undirected, negative_sampling, remove_self_loops, coalesce
 import os
 import sklearn.metrics as skmetrics
 import copy
@@ -131,6 +131,7 @@ class Experiment:
         pos_out = self.model.decode(z, data.edge_index)
 
         neg_edges = self.get_negative_edges(data)
+
         neg_out = self.model.decode(z, neg_edges)
 
         pos_loss = self.loss_function(pos_out, torch.ones_like(pos_out))
@@ -180,14 +181,37 @@ class Experiment:
     
     def get_negative_edges(self, data):
         if self.opts.negative_sampling == "structured":
-            result = structured_negative_sampling(data.edge_index, num_nodes=data.x.shape[0],
+            import random
+            
+            # make edge index undirected, meaning we perturb head and tail entities, sampling from all nodes
+            result = structured_negative_sampling(to_undirected(data.edge_index), num_nodes=data.x.shape[0] - 1,
                                                   contains_neg_self_loops=False)
-            return to_undirected(torch.vstack((result[0], result[2])))
+            
+            result = torch.vstack((result[0], result[2]))
+
+            # remove possibly sampled positive edges
+            pos_edges = data.edge_index
+            pos_weights = torch.ones((data.edge_index.shape[1], )).cuda()
+            neg_weights = torch.zeros((result.shape[1], )).cuda()
+
+            reduced_edges, pos_mask = coalesce(torch.hstack((result, pos_edges)), torch.cat((neg_weights, pos_weights)), reduce="add")
+
+            result = reduced_edges[:, pos_mask == 0]
+
+            # downsample so we have same amount as pos edges
+            sample_indices = random.sample(range(data.edge_index.shape[1]), data.edge_index.shape[1])
+            sample_indices = torch.LongTensor(sample_indices).cuda()
+            # TODO: also remove the ones going from ambivalent to ambivalent nodes
+
+            return result[:, sample_indices]
+        
         elif self.opts.negative_sampling == "pot_net":
+            import random
             # todo: split this into train, test and val as well
-            return self.dataset.pot_net[0]
+            sample_indices = random.sample(range(self.dataset.pot_net[0].shape[1]), data.edge_index.shape[1])
+            return self.dataset.pot_net[0][:, sample_indices]
         else:
-            return to_undirected(data.edge_label_index[:, data.edge_label == 0])
+            return negative_sampling(data.edge_index, num_nodes=data.x.shape[0] - 1)
         
     def score_batched(self, data, pot_net, metrics):
         self.model.eval()
