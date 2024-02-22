@@ -1,7 +1,7 @@
 import torch
 from src.nn.nn_utils import get_layer, get_mp_layer
 from torch_geometric.nn import Sequential
-from torch_geometric.utils import add_self_loops
+from torch_geometric.utils import add_self_loops, to_undirected
 
 class GAE_Encoder(torch.nn.Module):
     def __init__(self, input_dim, opts):
@@ -49,4 +49,4 @@ class GAE_Encoder(torch.nn.Module):
         self.nn = Sequential("x, edge_index", [(layer, flow) for layer, flow in zip(layers, flow)])
 
     def forward(self, x, edge_index):
-        return self.nn(x, add_self_loops(edge_index, num_nodes=x.shape[0])[0])
+        return self.nn(x, add_self_loops(to_undirected(edge_index), num_nodes=x.shape[0])[0])
