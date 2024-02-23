@@ -90,9 +90,11 @@ class Experiment:
 
         loss, _, _ = self.get_loss(data)
 
-        loss.backward()
+        if loss.requires_grad:
 
-        self.optimizer.step()
+            loss.backward()
+
+            self.optimizer.step()
         
         if self.opts.wandb_tracking: wandb.log({"train_loss": loss}, commit=False)
         
@@ -129,11 +131,11 @@ class Experiment:
     def get_loss(self, data):
         z = self.model.encode(data.x, data.edge_index)
 
-        pos_out = self.model.decode(z, data.edge_index)
+        pos_out = self.model.decode(z, data.edge_index, data.edge_index)
 
         neg_edges = self.get_negative_edges(data)
 
-        neg_out = self.model.decode(z, neg_edges)
+        neg_out = self.model.decode(z, neg_edges, data.edge_index)
 
         pos_loss = self.loss_function(pos_out, torch.ones_like(pos_out))
         neg_loss = self.loss_function(neg_out, torch.zeros_like(neg_out))

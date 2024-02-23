@@ -1,5 +1,5 @@
 import torch
-
+from torch_geometric.utils import degree
 
 class InnerProductDecoder(torch.nn.Module):
     def __init__(self, opts):
@@ -29,3 +29,13 @@ class PNormDecoder(torch.nn.Module):
     def forward(self, z, edge_index, sigmoid=True):
         value = self.pnorm(z[edge_index[0]], z[edge_index[1]])
         return torch.sigmoid(value) if sigmoid else value
+
+
+class DegreeSorter(torch.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super(DegreeSorter, self).__init__()
+
+    def forward(self, z, edge_index, pos_edge_index):
+        tail_nodes = edge_index[1, :]
+        degrees = degree(pos_edge_index[1, :], num_nodes=z.shape[0])
+        return degrees[tail_nodes]
