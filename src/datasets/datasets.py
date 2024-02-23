@@ -55,7 +55,7 @@ class GranPyDataset(InMemoryDataset):
             edgelist = pyg_utils.remove_self_loops(edgelist)[0]
 
         data = Data(x=features,
-                    edge_index=pyg_utils.to_undirected(edgelist),
+                    edge_index=edgelist,
                     num_nodes=features.shape[0])
 
         train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed)
@@ -77,7 +77,7 @@ class GranPyDataset(InMemoryDataset):
 
         seed_everything(test_seed)
 
-        traintest_split = RandomLinkSplit(num_val=0, num_test=test_fraction, is_undirected=True, add_negative_train_samples=True)
+        traintest_split = RandomLinkSplit(num_val=0, num_test=test_fraction, is_undirected=False, add_negative_train_samples=True)
 
         trainval_data, _, test_data = traintest_split(data)
 
@@ -85,7 +85,7 @@ class GranPyDataset(InMemoryDataset):
 
         seed_everything(val_seed)
 
-        trainval_split = RandomLinkSplit(num_val=real_val_frac, num_test=0, is_undirected=True, add_negative_train_samples=True)
+        trainval_split = RandomLinkSplit(num_val=real_val_frac, num_test=0, is_undirected=False, add_negative_train_samples=True)
 
         data.edge_index = trainval_data.edge_index
 
@@ -94,7 +94,7 @@ class GranPyDataset(InMemoryDataset):
         return train_data, val_data, test_data
 
     @classmethod
-    def construct_pot_net(self, all_pos_edges: torch.LongTensor) -> Tuple[torch.LongTensor, torch.LongTensor]:
+    def construct_pot_net(self, all_pos_edges: torch.LongTensor) -> Tuple[torch.LongTensor, torch.LongTensor, torch.LongTensor]:
         """ Constructs the potential network between transcription factors and targets by connecting each TF to each target
             careful, has memory complexity of n*m where n is the number of tfs and m is the number of targets
 
@@ -174,6 +174,7 @@ class McCallaDataset(GranPyDataset):
         if self.features:
             filename = os.path.join(self.raw_dir, "expression_data.zip")
             print("Downloading features for {} from {} to {}".format(self.name, self.featuretableurl, filename))
+            urlretrieve(self.featuretableurl, filename)
             with zipfile.ZipFile(filename, "r") as zip_ref:
                 zip_ref.extractall(self.raw_dir)
 

@@ -1,11 +1,12 @@
 from src.datasets import DatasetBootstrapper
 from src.nn.models import GAE_Kipf
 from src.utils import get_hash
+from src.negative_sampling import structured_negative_sampling
 import torch
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
 import torch.optim.lr_scheduler as lr_scheduler
-from torch_geometric.utils import to_undirected, structured_negative_sampling, k_hop_subgraph, coalesce, is_undirected
+from torch_geometric.utils import to_undirected, k_hop_subgraph, coalesce, is_undirected, negative_sampling, remove_self_loops, coalesce
 import os
 import sklearn.metrics as skmetrics
 import copy
@@ -131,6 +132,7 @@ class Experiment:
         pos_out = self.model.decode(z, data.edge_index)
 
         neg_edges = self.get_negative_edges(data)
+
         neg_out = self.model.decode(z, neg_edges)
 
         pos_loss = self.loss_function(pos_out, torch.ones_like(pos_out))
@@ -180,14 +182,15 @@ class Experiment:
     
     def get_negative_edges(self, data):
         if self.opts.negative_sampling == "structured":
-            result = structured_negative_sampling(data.edge_index, num_nodes=data.x.shape[0],
-                                                  contains_neg_self_loops=False)
-            return to_undirected(torch.vstack((result[0], result[2])))
+            return structured_negative_sampling(data)
+        
         elif self.opts.negative_sampling == "pot_net":
+            import random
             # todo: split this into train, test and val as well
-            return self.dataset.pot_net[0]
+            sample_indices = random.sample(range(self.dataset.pot_net[0].shape[1]), data.edge_index.shape[1])
+            return self.dataset.pot_net[0][:, sample_indices]
         else:
-            return to_undirected(data.edge_label_index[:, data.edge_label == 0])
+            return negative_sampling(data.edge_index, num_nodes=data.x.shape[0] - 1)
         
     def score_batched(self, data, pot_net, metrics):
         self.model.eval()
