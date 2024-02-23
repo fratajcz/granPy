@@ -1,11 +1,12 @@
 from src.datasets import DatasetBootstrapper
 from src.nn.models import GAE_Kipf
 from src.utils import get_hash
+from src.negative_sampling import structured_negative_sampling
 import torch
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
 import torch.optim.lr_scheduler as lr_scheduler
-from torch_geometric.utils import to_undirected, structured_negative_sampling, k_hop_subgraph, coalesce, is_undirected, negative_sampling, remove_self_loops, coalesce
+from torch_geometric.utils import to_undirected, k_hop_subgraph, coalesce, is_undirected, negative_sampling, remove_self_loops, coalesce
 import os
 import sklearn.metrics as skmetrics
 import copy
@@ -181,29 +182,7 @@ class Experiment:
     
     def get_negative_edges(self, data):
         if self.opts.negative_sampling == "structured":
-            import random
-            
-            # make edge index undirected, meaning we perturb head and tail entities, sampling from all nodes
-            result = structured_negative_sampling(to_undirected(data.edge_index), num_nodes=data.x.shape[0] - 1,
-                                                  contains_neg_self_loops=False)
-            
-            result = torch.vstack((result[0], result[2]))
-
-            # remove possibly sampled positive edges
-            pos_edges = data.edge_index
-            pos_weights = torch.ones((data.edge_index.shape[1], )).cuda()
-            neg_weights = torch.zeros((result.shape[1], )).cuda()
-
-            reduced_edges, pos_mask = coalesce(torch.hstack((result, pos_edges)), torch.cat((neg_weights, pos_weights)), reduce="add")
-
-            result = reduced_edges[:, pos_mask == 0]
-
-            # downsample so we have same amount as pos edges
-            sample_indices = random.sample(range(data.edge_index.shape[1]), data.edge_index.shape[1])
-            sample_indices = torch.LongTensor(sample_indices).cuda()
-            # TODO: also remove the ones going from ambivalent to ambivalent nodes
-
-            return result[:, sample_indices]
+            return structured_negative_sampling(data)
         
         elif self.opts.negative_sampling == "pot_net":
             import random

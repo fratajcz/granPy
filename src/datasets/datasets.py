@@ -94,7 +94,7 @@ class GranPyDataset(InMemoryDataset):
         return train_data, val_data, test_data
 
     @classmethod
-    def construct_pot_net(self, all_pos_edges: torch.LongTensor) -> Tuple[torch.LongTensor, torch.LongTensor, ]:
+    def construct_pot_net(self, all_pos_edges: torch.LongTensor) -> Tuple[torch.LongTensor, torch.LongTensor, torch.LongTensor]:
         """ Constructs the potential network between transcription factors and targets by connecting each TF to each target
             careful, has memory complexity of n*m where n is the number of tfs and m is the number of targets
 
