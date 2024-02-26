@@ -157,16 +157,24 @@ class McCallaDatasetProcessTest(unittest.TestCase):
 class GranPyDatasetTest(unittest.TestCase):
 
     def test_construct_pot_net(self):
-        edge_index = torch.LongTensor([[0, 1],
-                                       [3, 4]])
-        
-        
+        edge_index = torch.LongTensor([[0, 1, 2],
+                                       [3, 4, 4]])
         
         pot_net = GranPyDataset.construct_pot_net(edge_index)
 
-        self.assertTrue(torch.equal(pot_net[0], torch.LongTensor([[0, 1],
-                                                                  [4, 3]])))
-        self.assertTrue(torch.equal(pot_net[1], torch.LongTensor([0, 1])))
+        self.assertTrue(torch.equal(pot_net[0], torch.LongTensor([[0, 1, 2],
+                                                                  [4, 3, 3]])))
+        self.assertTrue(torch.equal(pot_net[1], torch.LongTensor([0, 1, 2])))
+        
+    def test_construct_pot_net_with_ambivalent(self):    
+        edge_index = torch.LongTensor([[0, 0, 1, 2],
+                                       [3, 1, 4, 4]])
+        
+        pot_net = GranPyDataset.construct_pot_net(edge_index)
+
+        self.assertTrue(torch.equal(pot_net[0], torch.LongTensor([[0, 1, 2, 2],
+                                                                  [4, 3, 1, 3]])))
+        self.assertTrue(torch.equal(pot_net[1], torch.LongTensor([0, 1, 2, 2])))
 
     def test_split_data(self):
         edge_index = torch.tensor([[0, 1, 1, 2, 2, 3, 3, 4, 4, 5],
