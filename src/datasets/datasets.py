@@ -116,7 +116,7 @@ class GranPyDataset(InMemoryDataset):
         all_pot_net_edges, tf_batches = pyg_utils.remove_self_loops(torch.vstack((tfs_repeated, targets_tiled)), edge_attr=tf_batches)
         all_pot_net_edges, tf_batches = pyg_utils.coalesce(all_pot_net_edges, edge_attr=tf_batches)
 
-        mask = torch.cat((tf_batches, -1 * torch.ones((all_pos_edges.shape[1],))))
+        mask = torch.cat((tf_batches + 1, -1 * torch.ones((all_pos_edges.shape[1],))))
         reduced_edges, pos_and_batch_mask = pyg_utils.coalesce(torch.hstack((all_pot_net_edges, all_pos_edges)), mask, reduce="mul")
 
         pos_mask = pos_and_batch_mask > 0
@@ -124,7 +124,7 @@ class GranPyDataset(InMemoryDataset):
         neg_edges = reduced_edges[:, pos_mask]
         batch_mask = pos_and_batch_mask[pos_mask]
 
-        return [neg_edges, batch_mask.abs(), tfs]
+        return [neg_edges, batch_mask.abs().long() - 1, tfs]
 
     def to(self, device):
         # for data_name in ["train_data", "val_data", "test_data", "pot_net"]:
