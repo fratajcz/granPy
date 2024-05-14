@@ -48,7 +48,7 @@ class Experiment:
 
         self.test_performance = None
 
-    def run(self):
+    def run(self, eval_only=False):
         
         if self.opts.cache_model:
             try: self.load_model()
@@ -58,15 +58,15 @@ class Experiment:
             if self.opts.wandb_tracking: 
                 wandb.init(project=self.opts.wandb_project, entity="scialdonelab", save_code=True, group=self.opts.wandb_group,
                            config=wandb.helper.parse_config(self.opts, exclude=('root', 'model_path', 'wandb_tracking', 'wandb_project', 'wandb_save_model', 'wandb_group')))
-            
-            for epoch in (pbar := tqdm(range(self.opts.epochs))):
-                pbar.set_description("Best {}: {}".format(self.opts.val_metric, self.best_val_performance))
-                self.train_step()
+            if not eval_only:
+                for epoch in (pbar := tqdm(range(self.opts.epochs))):
+                    pbar.set_description("Best {}: {}".format(self.opts.val_metric, self.best_val_performance))
+                    self.train_step()
 
-                did_improve = self.eval_step(target="val")
+                    did_improve = self.eval_step(target="val")
 
-                if self.out_of_patience(did_improve):
-                    break
+                    if self.out_of_patience(did_improve):
+                        break
 
             self.load_model()
 
@@ -88,7 +88,7 @@ class Experiment:
 
         data = self.dataset.train_data
 
-        loss, _, _ = self.get_loss(data)
+        loss, _, _ = self.get_loss(data, target="train")
 
         if loss.requires_grad:
 
@@ -107,7 +107,7 @@ class Experiment:
 
         data = getattr(self.dataset, "{}_data".format(target))
 
-        loss, pos_out, neg_out = self.get_loss(data)
+        loss, pos_out, neg_out = self.get_loss(data, target)
 
         if target == "val":
             value = self.get_metric(pos_out, neg_out, [self.opts.val_metric])[self.opts.val_metric]
@@ -128,12 +128,12 @@ class Experiment:
         else:
             return self.best_val_performance > value
     
-    def get_loss(self, data):
+    def get_loss(self, data, target):
         z = self.model.encode(data.x, data.edge_index)
 
         pos_out = self.model.decode(z, data.edge_index, pos_edge_index=data.edge_index)
 
-        neg_edges = self.get_negative_edges(data)
+        neg_edges = self.get_negative_edges(data, target)
 
         neg_out = self.model.decode(z, neg_edges, pos_edge_index=data.edge_index)
 
@@ -182,15 +182,20 @@ class Experiment:
 
         return values
     
-    def get_negative_edges(self, data):
+    def get_negative_edges(self, data, target):
         if self.opts.negative_sampling == "structured":
             return structured_negative_sampling(data)
         
         elif self.opts.negative_sampling == "pot_net":
             import random
             # todo: split this into train, test and val as well
-            sample_indices = random.sample(range(self.dataset.pot_net[0].shape[1]), data.edge_index.shape[1])
-            return self.dataset.pot_net[0][:, sample_indices]
+            mask = self.dataset.pot_net_masks[target]
+            try:
+                sample_indices = random.sample(range(self.dataset.pot_net[0][:, mask].shape[1]), data.edge_index.shape[1])
+            except ValueError:
+                # in case our negative set is smaller than the positive set, which can happen for test and val
+                sample_indices = range(self.dataset.pot_net[0][:, mask].shape[1])
+            return self.dataset.pot_net[0][:, mask][:, sample_indices]
         else:
             return negative_sampling(data.edge_index, num_nodes=data.x.shape[0] - 1)
         
@@ -293,13 +298,13 @@ class ExperimentArray:
         self.val_seeds = range(opts.val_seed, opts.val_seed + opts.n_folds)
         self.performance_reports = None
 
-    def run(self):
+    def run(self, eval_only=False):
         self.performance_reports = []
         for val_seed in tqdm(self.val_seeds):
             subopts = copy.deepcopy(self.opts)
             subopts.val_seed = val_seed
             fold_experiment = Experiment(subopts)
-            self.performance_reports.append(fold_experiment.run())
+            self.performance_reports.append(fold_experiment.run(eval_only))
 
         return self.performance_reports
         
