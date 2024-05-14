@@ -33,8 +33,10 @@ class experimentTestOpts:
     val_fraction = 0.2
     cuda = False
     epochs = 5
-    negative_sampling = "unstructure"
+    negative_sampling = "unstructured"
     test_metrics: List[str] = dataclasses.field(default_factory=list)
+    cache_model: bool = False
+    wandb_tracking: bool = False
 
 
 class ExperimentTest(unittest.TestCase):
@@ -49,6 +51,19 @@ class ExperimentTest(unittest.TestCase):
     def test_run(self):
 
         _opts = experimentTestOpts()
+        experiment = Experiment(_opts)
+
+        experiment.run()
+
+        self.assertIsNotNone(experiment.test_performance)  # if it has a non-None test performance
+        dataset_path = os.path.join(_opts.root, "processed", experiment.hash + ".pt")
+        self.assertTrue(os.path.isfile(dataset_path))  # if it has produced its dataset
+        self.assertTrue(os.path.isfile(os.path.join(_opts.model_path, experiment.hash + ".pt")))  # if it has produced a model file
+
+    def test_run_potnet(self):
+
+        _opts = experimentTestOpts()
+        _opts.negative_sampling = "pot_net"
         experiment = Experiment(_opts)
 
         experiment.run()
