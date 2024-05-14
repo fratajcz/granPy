@@ -14,16 +14,19 @@ def structured_negative_sampling(data, subtype="A"):
 
     # make edge index undirected, meaning we perturb head and tail entities, sampling from all nodes
     if subtype == "A":
-        sampling_space = torch.hstack((data.edge_index, torch.vstack((data.edge_index[1, :], data.edge_index[0, :]))))  # perturb head or tail node
-        result = str_neg_sampling(sampling_space, num_nodes=data.x.shape[0] - 1,
+        # perturb tail node first
+        result = str_neg_sampling(data.edge_index, num_nodes=data.x.shape[0] - 1,
                                   contains_neg_self_loops=False)
-        # need to remove edges from targets to isolated bc they would require two perturbations
-        from_target = torch.cat((torch.zeros(data.edge_index.shape[1],), torch.ones((data.edge_index.shape[1], )))).bool().cuda()
-        to_isolated = torch.stack([result[2] == isolated for isolated in isolated_nodes]).sum(dim=0).bool()
+        
+        tail_perturbed = torch.vstack((result[0], result[2]))
 
-        mask = ~from_target.logical_and(to_isolated)
+        # perturb head node now by switching, perturbin tail node and switching again
+        result = str_neg_sampling(torch.vstack((data.edge_index[1, :], data.edge_index[0, :])), num_nodes=data.x.shape[0] - 1,
+                                  contains_neg_self_loops=False)
+        
+        head_perturbed = torch.vstack((result[2], result[0]))
 
-        result = torch.vstack((result[0][mask], result[2][mask]))
+        result = torch.hstack((tail_perturbed, head_perturbed))
 
     if subtype == "B":
         sampling_space = torch.hstack((data.edge_index, data.edge_index))  # perturb only tail node with any node
