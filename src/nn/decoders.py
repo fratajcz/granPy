@@ -42,6 +42,16 @@ class DegreeSorter(torch.nn.Module):
         return degrees[tail_nodes]
 
 
+class OutDegreeSorter(torch.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+    def forward(self, z, edge_index, pos_edge_index):
+        head_nodes = edge_index[0, :]
+        degrees = degree(pos_edge_index[0, :], num_nodes=z.shape[0])
+        return degrees[head_nodes]
+
+
 class SymmetricDegreeSorter(torch.nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
