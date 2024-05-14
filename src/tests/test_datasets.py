@@ -176,6 +176,30 @@ class GranPyDatasetTest(unittest.TestCase):
                                                                   [4, 3, 1, 3]])))
         self.assertTrue(torch.equal(pot_net[1], torch.LongTensor([0, 1, 2, 2])))
 
+    def test_split_pot_net(self):
+        neg_edges = torch.LongTensor([[0, 1, 2, 2],
+                                      [4, 3, 1, 3]])
+        
+        masks = GranPyDataset.split_pot_net(neg_edges=neg_edges, test_fraction=0.25, val_fraction=0.25)
+
+
+        self.assertEqual(masks["train"].sum() + masks["val"].sum() + masks["test"].sum(), neg_edges.shape[1])
+
+        self.assertTrue(torch.equal(masks["train"] + masks["val"] + masks["test"], torch.ones((neg_edges.shape[1],))))
+
+    def test_split_pot_net_reproducible(self):
+        neg_edges = torch.LongTensor([[0, 1, 2, 2],
+                                      [4, 3, 1, 3]])
+        
+        masks = GranPyDataset.split_pot_net(neg_edges=neg_edges, test_fraction=0.25, val_fraction=0.25, test_seed=1)
+        masks_equal = GranPyDataset.split_pot_net(neg_edges=neg_edges, test_fraction=0.25, val_fraction=0.25, test_seed=1)
+        masks_unequal = GranPyDataset.split_pot_net(neg_edges=neg_edges, test_fraction=0.25, val_fraction=0.25, test_seed=2)
+
+
+        self.assertTrue(torch.equal(masks["train"], masks_equal["train"]))
+        self.assertFalse(torch.equal(masks["train"], masks_unequal["train"]))
+
+
     def test_split_data(self):
         edge_index = torch.tensor([[0, 1, 1, 2, 2, 3, 3, 4, 4, 5],
                                    [1, 0, 2, 1, 3, 2, 4, 3, 5, 4]])

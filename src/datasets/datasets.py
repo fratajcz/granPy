@@ -23,7 +23,7 @@ class GranPyDataset(InMemoryDataset):
         self.val_fraction = opts.val_fraction
         super().__init__(root)
 
-        self.train_data, self.val_data, self.test_data, self.pot_net = torch.load(self.processed_paths[0])
+        self.train_data, self.val_data, self.test_data, self.pot_net, self.pot_net_masks = torch.load(self.processed_paths[0])
 
     @property
     def processed_dir(self) -> str:
@@ -61,8 +61,9 @@ class GranPyDataset(InMemoryDataset):
         train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed)
 
         pot_net = self.construct_pot_net(edgelist)
+        pot_net_masks = self.split_pot_net(pot_net[0])
 
-        torch.save([train_data, val_data, test_data, pot_net], self.processed_paths[0])
+        torch.save([train_data, val_data, test_data, pot_net, pot_net_masks], self.processed_paths[0])
 
     @classmethod
     def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None):
@@ -125,6 +126,36 @@ class GranPyDataset(InMemoryDataset):
         batch_mask = pos_and_batch_mask[pos_mask]
 
         return [neg_edges, batch_mask.abs().long() - 1, tfs]
+    
+    @classmethod
+    def split_pot_net(self, neg_edges, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None) -> dict:
+        
+        if val_seed is None:
+            val_seed = random.randint(0, 100)
+
+        if test_seed is None:
+            test_seed = random.randint(0, 100)
+
+        n_test_selection = int(test_fraction * neg_edges.shape[1])
+        n_val_selection = int(val_fraction * neg_edges.shape[1])
+
+        seed_everything(test_seed)
+
+        perm_indices = torch.randperm(neg_edges.shape[1])
+
+        test_indices = perm_indices[:n_test_selection]
+        val_indices = perm_indices[n_test_selection:n_test_selection+n_val_selection]
+        train_indices = perm_indices[n_test_selection+n_val_selection:]
+
+        train_mask = torch.zeros((neg_edges.shape[1],)).bool()
+        val_mask = torch.zeros((neg_edges.shape[1],)).bool()
+        test_mask = torch.zeros((neg_edges.shape[1],)).bool()
+
+        train_mask[train_indices] = 1
+        val_mask[val_indices] = 1
+        test_mask[test_indices] = 1
+
+        return {"train": train_mask, "val": val_mask, "test": test_mask}
 
     def to(self, device):
         # for data_name in ["train_data", "val_data", "test_data", "pot_net"]:
@@ -135,6 +166,7 @@ class GranPyDataset(InMemoryDataset):
         self.pot_net[0] = self.pot_net[0].to(device)
         self.pot_net[1] = self.pot_net[1].to(device)
         self.pot_net[2] = self.pot_net[2].to(device)
+        self.pot_net_masks = {key: value.to(device) for key, value in self.pot_net[3]}
 
 
 class McCallaDataset(GranPyDataset):
