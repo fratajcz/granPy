@@ -181,11 +181,11 @@ class Experiment:
             values.update({metric: function(y_true=all_labels.detach().cpu().numpy(), y_score=all_out.detach().cpu().numpy())})
 
         return values
-    
+
     def get_negative_edges(self, data, target):
         if self.opts.negative_sampling == "structured":
             return structured_negative_sampling(data)
-        
+
         elif self.opts.negative_sampling == "pot_net":
             import random
             # todo: split this into train, test and val as well
@@ -198,7 +198,7 @@ class Experiment:
             return self.dataset.pot_net[0][:, mask][:, sample_indices]
         else:
             return negative_sampling(data.edge_index, num_nodes=data.x.shape[0] - 1)
-        
+
     def score_batched(self, data, pot_net, metrics):
         self.model.eval()
         self.model.zero_grad()

@@ -7,8 +7,8 @@ class TrainingPipeline:
     def __init__(self, opts):
         self.experimentarray = ExperimentArray(opts)
 
-    def run(self):
-        performance_reports = self.experimentarray.run()
+    def run(self, eval_only=False):
+        performance_reports = self.experimentarray.run(eval_only)
 
         metrics = list(performance_reports[0].keys())
 

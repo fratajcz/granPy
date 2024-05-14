@@ -166,7 +166,7 @@ class GranPyDataset(InMemoryDataset):
         self.pot_net[0] = self.pot_net[0].to(device)
         self.pot_net[1] = self.pot_net[1].to(device)
         self.pot_net[2] = self.pot_net[2].to(device)
-        self.pot_net_masks = {key: value.to(device) for key, value in self.pot_net[3]}
+        self.pot_net_masks = {key: value.to(device) for key, value in self.pot_net_masks.items()}
 
 
 class McCallaDataset(GranPyDataset):
