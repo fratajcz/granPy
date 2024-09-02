@@ -1,5 +1,6 @@
 import torch
 from torch_geometric.utils import degree
+from src.nn.nn_utils import get_layer
 
 
 class InnerProductDecoder(torch.nn.Module):
@@ -29,6 +30,22 @@ class PNormDecoder(torch.nn.Module):
 
     def forward(self, z, edge_index, sigmoid=True, *args, **kwargs):
         value = self.pnorm(z[edge_index[0]], z[edge_index[1]])
+        return torch.sigmoid(value) if sigmoid else value
+
+
+class MLPDecoder(torch.nn.Module):
+    def __init__(self, opts):
+        super(MLPDecoder, self).__init__()
+        layers = []
+        layers.append(torch.nn.Linear(opts.latent_dim * 2, opts.latent_dim))
+        layers.append(get_layer(opts.activation_layer)())
+        layers.append(torch.nn.Linear(opts.latent_dim, opts.latent_dim // 2))
+        layers.append(get_layer(opts.activation_layer)())
+        layers.append(torch.nn.Linear(opts.latent_dim // 2, 1))
+        self.nn = torch.nn.Sequential(*layers)
+
+    def forward(self, z, edge_index, pos_edge_index=None, sigmoid=True, *args, **kwargs):
+        value = self.nn(torch.hstack((z[edge_index[0]], z[edge_index[1]])))
         return torch.sigmoid(value) if sigmoid else value
 
 

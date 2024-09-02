@@ -1,5 +1,5 @@
 from src.datasets import DatasetBootstrapper
-from src.nn.models import GAE_Kipf
+import src.nn.models as models
 from src.utils import get_hash
 from src.negative_sampling import structured_negative_sampling
 import torch
@@ -27,7 +27,7 @@ class Experiment:
 
         self.dataset.to(self.devices[0])
 
-        self.model = GAE_Kipf(input_dim=self.dataset.train_data.x.shape[1], opts=opts).to(self.devices[0])
+        self.model = getattr(models, opts.model)(input_dim=self.dataset.train_data.x.shape[1], opts=opts).to(self.devices[0])
 
         self.loss_function = BCEWithLogitsLoss()
 
