@@ -1,10 +1,102 @@
 import unittest
-from src.nn.encoders import GAE_Encoder
+from src.nn.encoders import GAE_Encoder, MLP_Encoder
 import src.nn.layers as own_layers
 import dataclasses
 import torch.nn as nn
-from src.nn.decoders import DegreeSorter
+from src.nn.decoders import DegreeSorter, MLPDecoder
+from src.nn.models import NaiveModel, AutoEncoder
+import src.nn.models as models
 import torch
+
+class NaiveModelTest(unittest.TestCase):
+    def test_get_model(self):
+        @dataclasses.dataclass
+        class opts:
+            n_conv_layers = 3
+            activation_layer = "ReLU"
+            dropout_ratio = 0.5
+            mplayer = "GCNConv"
+            mplayer_args = []
+            mplayer_kwargs = {}
+            latent_dim = 32
+            layer_ratio = 10
+            decoder = "HarmonicDegreeSorter"
+            model = "NaiveModel"
+
+        model = getattr(models, opts().model)(100, opts())
+
+        self.assertTrue(isinstance(model, NaiveModel))
+
+
+
+    def test_init(self):
+
+        @dataclasses.dataclass
+        class opts:
+            n_conv_layers = 3
+            activation_layer = "ReLU"
+            dropout_ratio = 0.5
+            mplayer = "GCNConv"
+            mplayer_args = []
+            mplayer_kwargs = {}
+            latent_dim = 32
+            layer_ratio = 10
+            decoder = "HarmonicDegreeSorter"
+
+        model = NaiveModel(100, opts())
+
+        self.assertTrue(True)
+
+    def test_encode(self):
+        @dataclasses.dataclass
+        class opts:
+            n_conv_layers = 3
+            activation_layer = "ReLU"
+            dropout_ratio = 0.5
+            mplayer = "GCNConv"
+            mplayer_args = []
+            mplayer_kwargs = {}
+            latent_dim = 32
+            layer_ratio = 10
+            decoder = "HarmonicDegreeSorter"
+
+        model = NaiveModel(100, opts())
+
+        x = torch.rand((5, 10))
+
+        out = model.encode(x)
+
+        out2 = model.encode(x, x)
+
+        self.assertTrue(torch.equal(x, out))
+        self.assertTrue(torch.equal(x, out2))
+
+        self.assertTrue(True)
+
+    def test_decode(self):
+        @dataclasses.dataclass
+        class opts:
+            n_conv_layers = 3
+            activation_layer = "ReLU"
+            dropout_ratio = 0.5
+            mplayer = "GCNConv"
+            mplayer_args = []
+            mplayer_kwargs = {}
+            latent_dim = 32
+            layer_ratio = 10
+            decoder = "HarmonicDegreeSorter"
+
+        model = NaiveModel(100, opts())
+
+        x = torch.rand((5, 10))
+        edges = torch.LongTensor([[0, 1, 2, 4],
+                                  [1, 2, 3, 3]])
+        
+        prediction = model.decode(x, edges, edges)
+
+        self.assertTrue(torch.equal(prediction, torch.Tensor([1, 1, 4/3, 4/3])))
+
+        
 
 class EncoderTest(unittest.TestCase):
     def test_init_nn(self):
@@ -92,6 +184,47 @@ class EncoderTest(unittest.TestCase):
         encoder = GAE_Encoder(1000, opts())
 
         self.assertTrue(isinstance(encoder.nn[1], own_layers.NoneConv))
+
+    def test_MLPEncoder(self):
+        @dataclasses.dataclass
+        class opts:
+            n_conv_layers = 2
+            activation_layer = "ReLU"
+            dropout_ratio = 0.5
+            mplayer_args = []
+            mplayer_kwargs = {}
+            latent_dim = 32
+            layer_ratio = 10
+
+        encoder = MLP_Encoder(100, opts())
+
+        x = torch.rand(5, 100)
+        edge_index = torch.LongTensor([[0, 1, 3],
+                                       [3, 2, 1]])
+        
+        z = encoder(x, edge_index)
+
+
+class DecoderTest(unittest.TestCase):
+    def test_forward(self):
+        @dataclasses.dataclass
+        class opts:
+            n_conv_layers = 2
+            activation_layer = "ReLU"
+            dropout_ratio = 0.5
+            mplayer_args = []
+            mplayer_kwargs = {}
+            latent_dim = 32
+            layer_ratio = 10
+
+        decoder = MLPDecoder(opts())
+
+        x = torch.rand((5, 32))
+        edge_index = torch.LongTensor([[0, 1, 3],
+                                       [3, 2, 1]])
+        
+        output = decoder(x, edge_index)
+        self.assertEqual(output.shape[0], 3)
 
 class DegreeSorterTest(unittest.TestCase):
     def test_correct_order(self):
