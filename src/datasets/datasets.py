@@ -23,7 +23,7 @@ class GranPyDataset(InMemoryDataset):
         self.val_fraction = opts.val_fraction
         super().__init__(root)
 
-        self.train_data, self.val_data, self.test_data, self.pot_net, self.pot_net_masks = torch.load(self.processed_paths[0])
+        self.train_data, self.val_data, self.test_data, self.pot_net = torch.load(self.processed_paths[0])
 
     @property
     def processed_dir(self) -> str:
@@ -60,10 +60,11 @@ class GranPyDataset(InMemoryDataset):
 
         train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed)
 
-        pot_net = self.construct_pot_net(edgelist)
-        pot_net_masks = self.split_pot_net(pot_net[0])
+        pot_net = dict(train = self.construct_pot_net(train_data.edge_index),
+                       val= self.construct_pot_net(torch.hstack(train_data.edge_index, val_data.edge_index)),
+                       test = self.construct_pot_net(torch.hstack(train_data.edge_index, val_data.edge_index, test_data.edge_index)))
 
-        torch.save([train_data, val_data, test_data, pot_net, pot_net_masks], self.processed_paths[0])
+        torch.save([train_data, val_data, test_data, pot_net], self.processed_paths[0])
 
     @classmethod
     def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None):
@@ -78,7 +79,7 @@ class GranPyDataset(InMemoryDataset):
 
         seed_everything(test_seed)
 
-        traintest_split = RandomLinkSplit(num_val=0, num_test=test_fraction, is_undirected=False, add_negative_train_samples=True)
+        traintest_split = RandomLinkSplit(num_val=0, num_test=test_fraction, is_undirected=False, add_negative_train_samples=False)
 
         trainval_data, _, test_data = traintest_split(data)
 
@@ -86,7 +87,7 @@ class GranPyDataset(InMemoryDataset):
 
         seed_everything(val_seed)
 
-        trainval_split = RandomLinkSplit(num_val=real_val_frac, num_test=0, is_undirected=False, add_negative_train_samples=True)
+        trainval_split = RandomLinkSplit(num_val=real_val_frac, num_test=0, is_undirected=False, add_negative_train_samples=False)
 
         data.edge_index = trainval_data.edge_index
 
@@ -106,7 +107,7 @@ class GranPyDataset(InMemoryDataset):
 
         tfs, num_targets_per_tf = all_pos_edges[0, :].unique(return_counts=True)
 
-        targets = all_pos_edges[1, :].unique()
+        targets = range(self._data.x.shape[0])
 
         tfs_repeated = tfs.repeat_interleave(repeats=targets.shape[0]).unsqueeze(0)
 
@@ -127,36 +128,6 @@ class GranPyDataset(InMemoryDataset):
 
         return [neg_edges, batch_mask.abs().long() - 1, tfs]
     
-    @classmethod
-    def split_pot_net(self, neg_edges, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None) -> dict:
-        
-        if val_seed is None:
-            val_seed = random.randint(0, 100)
-
-        if test_seed is None:
-            test_seed = random.randint(0, 100)
-
-        n_test_selection = int(test_fraction * neg_edges.shape[1])
-        n_val_selection = int(val_fraction * neg_edges.shape[1])
-
-        seed_everything(test_seed)
-
-        perm_indices = torch.randperm(neg_edges.shape[1])
-
-        test_indices = perm_indices[:n_test_selection]
-        val_indices = perm_indices[n_test_selection:n_test_selection+n_val_selection]
-        train_indices = perm_indices[n_test_selection+n_val_selection:]
-
-        train_mask = torch.zeros((neg_edges.shape[1],)).bool()
-        val_mask = torch.zeros((neg_edges.shape[1],)).bool()
-        test_mask = torch.zeros((neg_edges.shape[1],)).bool()
-
-        train_mask[train_indices] = 1
-        val_mask[val_indices] = 1
-        test_mask[test_indices] = 1
-
-        return {"train": train_mask, "val": val_mask, "test": test_mask}
-
     def to(self, device):
         # for data_name in ["train_data", "val_data", "test_data", "pot_net"]:
         #    self.__setattr__(data_name, self.__getattr__(data_name).to(device))
@@ -166,7 +137,6 @@ class GranPyDataset(InMemoryDataset):
         self.pot_net[0] = self.pot_net[0].to(device)
         self.pot_net[1] = self.pot_net[1].to(device)
         self.pot_net[2] = self.pot_net[2].to(device)
-        self.pot_net_masks = {key: value.to(device) for key, value in self.pot_net_masks.items()}
 
 
 class McCallaDataset(GranPyDataset):

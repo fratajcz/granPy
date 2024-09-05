@@ -1,7 +1,7 @@
 from src.datasets import DatasetBootstrapper
 from src.nn.models import GAE_Kipf
 from src.utils import get_hash
-from src.negative_sampling import structured_negative_sampling
+from src.negative_sampling import neg_sampling
 import torch
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
@@ -183,21 +183,14 @@ class Experiment:
         return values
 
     def get_negative_edges(self, data, target):
-        if self.opts.negative_sampling == "structured":
-            return structured_negative_sampling(data)
-
+        if self.opts.negative_sampling == "structured_tail":
+            return neg_sampling(data, space="pot_net", type="tail")
+        elif self.opts.negative_sampling == "structured_head_or_tail":
+            return neg_sampling(data, space="full", type="head_or_tail")
         elif self.opts.negative_sampling == "pot_net":
-            import random
-            # todo: split this into train, test and val as well
-            mask = self.dataset.pot_net_masks[target]
-            try:
-                sample_indices = random.sample(range(self.dataset.pot_net[0][:, mask].shape[1]), data.edge_index.shape[1])
-            except ValueError:
-                # in case our negative set is smaller than the positive set, which can happen for test and val
-                sample_indices = range(self.dataset.pot_net[0][:, mask].shape[1])
-            return self.dataset.pot_net[0][:, mask][:, sample_indices]
+            return neg_sampling(data, space="pot_net", type="random", target=target)
         else:
-            return negative_sampling(data.edge_index, num_nodes=data.x.shape[0] - 1)
+            return neg_sampling(data, space="full", type="random")
 
     def score_batched(self, data, pot_net, metrics):
         self.model.eval()
