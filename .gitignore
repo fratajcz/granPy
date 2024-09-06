@@ -1,0 +1,7 @@
+.DS_Store
+data
+artifacts
+figures
+models
+wandb
+**/__pycache__

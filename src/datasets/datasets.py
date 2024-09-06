@@ -23,7 +23,7 @@ class GranPyDataset(InMemoryDataset):
         self.val_fraction = opts.val_fraction
         super().__init__(root)
 
-        self.train_data, self.val_data, self.test_data, self.pot_net = torch.load(self.processed_paths[0])
+        self.train_data, self.val_data, self.test_data = torch.load(self.processed_paths[0])
 
     @property
     def processed_dir(self) -> str:
@@ -60,11 +60,11 @@ class GranPyDataset(InMemoryDataset):
 
         train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed)
 
-        pot_net = dict(train = self.construct_pot_net(train_data.edge_index),
-                       val= self.construct_pot_net(torch.hstack(train_data.edge_index, val_data.edge_index)),
-                       test = self.construct_pot_net(torch.hstack(train_data.edge_index, val_data.edge_index, test_data.edge_index)))
+        train_data.pot_net = self.construct_pot_net(train_data.edge_index)
+        val_data.pot_net = self.construct_pot_net(torch.hstack(train_data.edge_index, val_data.edge_index))
+        test_data.pot_net = self.construct_pot_net(torch.hstack(train_data.edge_index, val_data.edge_index, test_data.edge_index))
 
-        torch.save([train_data, val_data, test_data, pot_net], self.processed_paths[0])
+        torch.save([train_data, val_data, test_data], self.processed_paths[0])
 
     @classmethod
     def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None):
@@ -92,6 +92,15 @@ class GranPyDataset(InMemoryDataset):
         data.edge_index = trainval_data.edge_index
 
         train_data, val_data, _ = trainval_split(data)
+        
+        train_data.known_edges = train_data.edge_index
+        train_data.known_edges_label = torch.ones((train_data.known_edges.shape[1],))
+        
+        val_data.known_edges = torch.hstack((train_data.known_edges, val_data.edge_index))
+        val_data.known_edges_label = torch.hstack((1-train_data.known_edges_label, torch.ones((val_data.edge_index.shape[1],))))
+        
+        test_data.known_edges = torch.hstack((val_data.known_edges, test_data.edge_index))
+        test_data.known_edges_label = torch.hstack((1-val_data.known_edges_label, torch.ones((test_data.edge_index.shape[1],))))
 
         return train_data, val_data, test_data
 
@@ -134,9 +143,6 @@ class GranPyDataset(InMemoryDataset):
         self.train_data = self.train_data.to(device)
         self.test_data = self.test_data.to(device)
         self.val_data = self.val_data.to(device)
-        self.pot_net[0] = self.pot_net[0].to(device)
-        self.pot_net[1] = self.pot_net[1].to(device)
-        self.pot_net[2] = self.pot_net[2].to(device)
 
 
 class McCallaDataset(GranPyDataset):
