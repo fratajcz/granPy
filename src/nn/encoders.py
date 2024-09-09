@@ -4,8 +4,6 @@ from torch_geometric.nn import Sequential
 from torch_geometric.utils import add_self_loops, to_undirected
 
 
-
-
 class GAE_Encoder(torch.nn.Module):
     def __init__(self, input_dim, opts):
         assert opts.n_conv_layers in [0, 1, 2, 3]
@@ -55,10 +53,41 @@ class GAE_Encoder(torch.nn.Module):
         return self.nn(x, add_self_loops(to_undirected(edge_index), num_nodes=x.shape[0])[0])
 
 
+class MLP_Encoder(torch.nn.Module):
+    def __init__(self, input_dim, opts):
+        assert opts.n_conv_layers in [0, 1, 2, 3]
+        assert opts.layer_ratio >= 1
+
+        super(MLP_Encoder, self).__init__()
+        self.n_conv_layers = opts.n_conv_layers
+        hidden1 = int(opts.latent_dim*pow(opts.layer_ratio, max(opts.n_conv_layers-1, 0)))
+
+        layers = torch.nn.ModuleList()
+        layers.append(get_layer("Linear")(input_dim, hidden1))
+        layers.append(get_layer(opts.activation_layer)())
+        layers.append(get_layer("Dropout")(opts.dropout_ratio))
+
+        if self.n_conv_layers == 2:
+            hidden2 = int(opts.latent_dim*pow(opts.layer_ratio, opts.n_conv_layers-2))
+            layers.append(get_layer("Linear")(hidden1, hidden2))
+            layers.append(get_layer(opts.activation_layer)())
+            layers.append(get_layer("Dropout")(opts.dropout_ratio))
+
+        elif self.n_conv_layers > 2:
+            for _ in range(self.n_conv_layers - 2):
+                layers.append(get_layer("Linear")(hidden2, hidden2))
+                layers.append(get_layer(opts.activation_layer)())
+                layers.append(get_layer("Dropout")(opts.dropout_ratio))
+            
+        self.nn = torch.nn.Sequential(*layers)
+
+    def forward(self, x, edge_index):
+        return self.nn(x)
+
 class IdentityEncoder(torch.nn.Module):
     def __init__(self, input_dim, opts):
         """ Dummy encoder that does nothing """
         super(IdentityEncoder, self).__init__()
 
-    def forward(x, edge_index):
+    def forward(x, *args, **kwargs):
         return x
