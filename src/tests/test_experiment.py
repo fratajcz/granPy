@@ -12,6 +12,9 @@ class experimentTestOpts:
     n_conv_layers = 1
     activation_layer = "ReLU"
     dropout_ratio = 0.5
+    decoder: str = "MLPDecoder"
+    model: str = "AutoEncoder"
+    encoder: str = "GAE_Encoder"
     mplayer = "GCNConv"
     mplayer_args = []
     mplayer_kwargs = {}
@@ -123,15 +126,3 @@ class ExperimentTest(unittest.TestCase):
         isoutofpatience = experiment.out_of_patience(True)
         self.assertFalse(isoutofpatience)
         self.assertEqual(experiment.patience, _opts.es_patience)
-
-    def test_batch_pos_edges_by_tf(self):
-        data = Data(edge_index=torch.LongTensor([[0, 1, 3, 4],
-                                                 [3, 4, 0, 1]]))
-        
-        pot_net = [None, None, torch.LongTensor([0, 1])]
-
-        directed_pos_edges, batch_mask = Experiment.batch_pos_edges_by_tf(data, pot_net)
-
-        self.assertTrue(torch.equal(directed_pos_edges, torch.LongTensor([[0, 1],
-                                                                          [3, 4]])))
-        self.assertTrue(torch.equal(batch_mask, torch.LongTensor([0, 1])))

@@ -5,7 +5,6 @@ from torch_geometric.transforms import RandomLinkSplit
 import os
 import pandas as pd
 from sklearn.preprocessing import OrdinalEncoder, minmax_scale
-from sklearn.model_selection import train_test_split
 import torch
 import numpy as np
 import random
@@ -60,9 +59,9 @@ class GranPyDataset(InMemoryDataset):
 
         train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed)
 
-        train_data.pot_net = self.construct_pot_net(train_data.edge_index)
-        val_data.pot_net = self.construct_pot_net(torch.hstack(train_data.edge_index, val_data.edge_index))
-        test_data.pot_net = self.construct_pot_net(torch.hstack(train_data.edge_index, val_data.edge_index, test_data.edge_index))
+        train_data.pot_net = self.construct_pot_net(train_data)
+        val_data.pot_net = self.construct_pot_net(val_data)
+        test_data.pot_net = self.construct_pot_net(test_data)
 
         torch.save([train_data, val_data, test_data], self.processed_paths[0])
 
@@ -93,52 +92,52 @@ class GranPyDataset(InMemoryDataset):
 
         train_data, val_data, _ = trainval_split(data)
         
+        train_data.pos_edges = train_data.edge_index
         train_data.known_edges = train_data.edge_index
-        train_data.known_edges_label = torch.ones((train_data.known_edges.shape[1],))
+        train_data.known_edges_label = torch.ones(train_data.known_edges.shape[1])
         
-        val_data.known_edges = torch.hstack((train_data.known_edges, val_data.edge_index))
-        val_data.known_edges_label = torch.hstack((1-train_data.known_edges_label, torch.ones((val_data.edge_index.shape[1],))))
+        val_data.pos_edges = val_data.edge_label_index[:, val_data.edge_label == 1]
+        val_data.known_edges = torch.hstack((train_data.known_edges, val_data.pos_edges))
+        val_data.known_edges_label = torch.hstack((1-train_data.known_edges_label, torch.ones(val_data.pos_edges.shape[1])))
         
-        test_data.known_edges = torch.hstack((val_data.known_edges, test_data.edge_index))
-        test_data.known_edges_label = torch.hstack((1-val_data.known_edges_label, torch.ones((test_data.edge_index.shape[1],))))
+        test_data.pos_edges = test_data.edge_label_index[:, test_data.edge_label == 1]
+        test_data.known_edges = torch.hstack((val_data.known_edges, test_data.pos_edges))
+        test_data.known_edges_label = torch.hstack((1-val_data.known_edges_label, torch.ones(test_data.pos_edges.shape[1])))
 
         return train_data, val_data, test_data
 
     @classmethod
-    def construct_pot_net(self, all_pos_edges: torch.LongTensor) -> Tuple[torch.LongTensor, torch.LongTensor, torch.LongTensor]:
+    def construct_pot_net(self, data) -> torch.LongTensor:
         """ Constructs the potential network between transcription factors and targets by connecting each TF to each target
             careful, has memory complexity of n*m where n is the number of tfs and m is the number of targets
 
             Returns only negative edges and a tf mask by which the edges can be batched to their tfs.
             """
 
-        all_pos_edges = pyg_utils.coalesce(all_pos_edges)
+        all_pos_edges = pyg_utils.coalesce(data.known_edges)
 
         tfs, num_targets_per_tf = all_pos_edges[0, :].unique(return_counts=True)
 
-        targets = range(self._data.x.shape[0])
+        targets = torch.arange(data.num_nodes)
 
-        tfs_repeated = tfs.repeat_interleave(repeats=targets.shape[0]).unsqueeze(0)
+        tfs_repeated = tfs.repeat_interleave(repeats=data.num_nodes).unsqueeze(0)
 
-        tf_batches = tfs.repeat_interleave(repeats=targets.shape[0])
+        tf_batches = tfs.repeat_interleave(repeats=data.num_nodes)
 
         targets_tiled = targets.tile((tfs.shape[0],)).unsqueeze(0)
 
         all_pot_net_edges, tf_batches = pyg_utils.remove_self_loops(torch.vstack((tfs_repeated, targets_tiled)), edge_attr=tf_batches)
-        all_pot_net_edges, tf_batches = pyg_utils.coalesce(all_pot_net_edges, edge_attr=tf_batches)
 
         mask = torch.cat((tf_batches + 1, -1 * torch.ones((all_pos_edges.shape[1],))))
-        reduced_edges, pos_and_batch_mask = pyg_utils.coalesce(torch.hstack((all_pot_net_edges, all_pos_edges)), mask, reduce="mul")
+        reduced_edges, neg_batch_mask = pyg_utils.coalesce(torch.hstack((all_pot_net_edges, all_pos_edges)), mask, reduce="mul")
 
-        pos_mask = pos_and_batch_mask > 0
+        neg_mask = neg_batch_mask > 0
+        neg_edges = reduced_edges[:, neg_mask]
 
-        neg_edges = reduced_edges[:, pos_mask]
-        batch_mask = pos_and_batch_mask[pos_mask]
-
-        return [neg_edges, batch_mask.abs().long() - 1, tfs]
+        return neg_edges
     
     def to(self, device):
-        # for data_name in ["train_data", "val_data", "test_data", "pot_net"]:
+        # for data_name in ["train_data", "val_data", "test_data"]:
         #    self.__setattr__(data_name, self.__getattr__(data_name).to(device))
         self.train_data = self.train_data.to(device)
         self.test_data = self.test_data.to(device)
