@@ -6,7 +6,6 @@ import torch
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
 import torch.optim.lr_scheduler as lr_scheduler
-from torch_geometric.utils import to_undirected, k_hop_subgraph, coalesce, is_undirected
 import os
 import sklearn.metrics as skmetrics
 import copy

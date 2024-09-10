@@ -8,7 +8,6 @@ from sklearn.preprocessing import OrdinalEncoder, minmax_scale
 import torch
 import numpy as np
 import random
-from typing import Tuple
 
 class GranPyDataset(InMemoryDataset):
     """ Abstract class that governs the joint behaviours of all datasets in granPy, such as datset naming an storage behaviour.
