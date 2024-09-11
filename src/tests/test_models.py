@@ -3,8 +3,9 @@ from src.nn.encoders import GAE_Encoder, MLP_Encoder
 import src.nn.layers as own_layers
 import dataclasses
 import torch.nn as nn
-from src.nn.decoders import DegreeSorter, MLPDecoder
+from src.nn.decoders import DegreeSorter, MLPDecoder, CorrelationDecoder
 from src.nn.models import NaiveModel, AutoEncoder
+from scipy.stats import pearsonr
 import src.nn.models as models
 import torch
 
@@ -246,3 +247,28 @@ class DegreeSorterTest(unittest.TestCase):
 
         neg_values = sorter(z, neg_edges, pos_edges)
         self.assertTrue(torch.eq(neg_values, torch.Tensor((0, 0, 2, 0, 1))).all())
+        
+class CorrelationDecoderTest(unittest.TestCase):
+    def test_correct_values(self):
+        # node 1,3 and 4 have value 1, node 2 has value 2 and nodes 0,5,6 have value 0
+        pos_edges = torch.LongTensor([[0, 0, 1, 1, 1],
+                                      [1, 2, 2, 3, 4]])
+
+        num_nodes = 7
+
+        z = torch.rand((num_nodes, 5))
+        
+        @dataclasses.dataclass
+        class opts:
+            n_conv_layers = 2
+            activation_layer = "ReLU"
+            dropout_ratio = 0.5
+            mplayer_args = []
+            mplayer_kwargs = {}
+            latent_dim = 32
+            layer_ratio = 10
+
+        correlation = CorrelationDecoder(opts)
+        out_values = correlation(z, pos_edges, sigmoid=False)
+        true_values = torch.tensor([pearsonr(z[edge[0]],  z[edge[1]]).statistic for edge in pos_edges.T], dtype=torch.float32)
+        self.assertTrue(torch.allclose(true_values, out_values))
