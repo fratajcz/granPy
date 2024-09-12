@@ -22,16 +22,16 @@ class opts:
     model_path: str = "/mnt/storage/granpy/models/"
     lr: float = 1e-3
     es_patience: int = 10
-    decoder: str = "MLPDecoder"
-    model: str = "AutoEncoder"
+    decoder: str = "HarmonicDegreeSorter"
+    model: str = "NaiveModel" # "AutoEncoder"
     encoder: str = "GAE_Encoder"
     val_mode: str = "max"
-    val_metric: str = "average_precision_score"
+    val_metric: str = "roc_auc_score"
     test_metrics: List[str] = dataclasses.field(default_factory=list)
     n_folds: int = 5
-    epochs: int = 500
+    epochs: int = 1
     cuda: bool = True
-    negative_sampling: str = "structured"
+    negative_sampling: str = "structured_tail"
     score_batched: bool = False
     wandb_tracking: bool = True
     wandb_project: str = "granpy-dev"

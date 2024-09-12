@@ -30,7 +30,8 @@ class NoneConvTest(unittest.TestCase):
 
         out1 = conv(x, edges1)
         out2 = conv(x, edges2)
-
+        print(out1)
+        print(out2)
         self.assertTrue(torch.eq(out1, out2).all())
 
     def test_different_degree_different_output(self):

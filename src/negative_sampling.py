@@ -3,7 +3,7 @@ from torch_geometric.utils import structured_negative_sampling as str_neg_sampli
 from torch_geometric.utils import structured_negative_sampling_feasible as str_negative_sampling_feasible
 import torch
 
-def neg_sampling(data, space="full", type="structured"):
+def neg_sampling(data, space="full", type="tail"):
     import random
     
     assert(space in ["full", "pot_net"])
