@@ -1,6 +1,6 @@
 from src.datasets import DatasetBootstrapper
 import src.nn.models as models
-from src.utils import get_hash
+from src.utils import get_dataset_hash, get_model_hash
 from src.negative_sampling import neg_sampling
 import torch
 from torch.nn import BCEWithLogitsLoss
@@ -18,10 +18,10 @@ class Experiment:
     def __init__(self, opts):
         self.opts = opts
 
-        # TODO: get model hash and dataset hash? To save processing same dataset for different models?
-        self.hash = get_hash(opts)
+        self.model_hash = get_model_hash(opts)
+        self.dataset_hash = get_dataset_hash(opts)
 
-        self.dataset = DatasetBootstrapper(opts, hash=self.hash).get_dataset()
+        self.dataset = DatasetBootstrapper(opts, hash=self.dataset_hash).get_dataset()
 
         self.dataset.to(self.devices[0])
 
@@ -74,7 +74,7 @@ class Experiment:
             self.test_performance = self.score_batched(self.dataset.test_data, self.opts.test_metrics)
         if self.opts.wandb_tracking and wandb.run is not None:
             if self.opts.wandb_save_model:
-                wandb.run.log_model(path=os.path.join(self.opts.model_path, self.hash + ".pt"))
+                wandb.run.log_model(path=os.path.join(self.opts.model_path, self.model_hash + ".pt"))
             wandb.log(self.test_performance)
             wandb.finish()
 
@@ -146,11 +146,11 @@ class Experiment:
         }
         if not os.path.exists(os.path.dirname(self.opts.model_path)):
             os.makedirs(os.path.dirname(self.opts.model_path))
-        torch.save(state_dict, os.path.join(self.opts.model_path, self.hash + ".pt"))
+        torch.save(state_dict, os.path.join(self.opts.model_path, self.model_hash + ".pt"))
 
     def load_model(self, path=None):
         '''loads a state dict either from the current run or from a given path'''
-        path = os.path.join(self.opts.model_path, self.hash + ".pt")
+        path = os.path.join(self.opts.model_path, self.model_hash + ".pt")
         if torch.cuda.is_available():
             try:
                 state_dict = torch.load(path)
@@ -181,14 +181,16 @@ class Experiment:
         return values
 
     def get_negative_edges(self, data):
-        if self.opts.negative_sampling == "structured_tail":
+        if self.opts.negative_sampling.lower() == "structured_tail":
             return neg_sampling(data, space="pot_net", type="tail")
-        elif self.opts.negative_sampling == "structured_head_or_tail":
+        elif self.opts.negative_sampling.lower() == "structured_head_or_tail":
             return neg_sampling(data, space="full", type="head_or_tail")
-        elif self.opts.negative_sampling == "pot_net":
+        elif self.opts.negative_sampling.lower() == "pot_net":
             return neg_sampling(data, space="pot_net", type="random")
-        else:
+        elif self.opts.negative_sampling.lower() == "random":
             return neg_sampling(data, space="full", type="random")
+        else:
+            raise ValueError("Available Negative Sampling Types are structured_tail, structured_head_or_tail, pot_net and random. you have chosen {}".format(self.opts.negative_sampling))
 
     def score_batched(self, data, metrics):
         self.model.eval()
