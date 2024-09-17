@@ -5,11 +5,9 @@ from torch_geometric.transforms import RandomLinkSplit
 import os
 import pandas as pd
 from sklearn.preprocessing import OrdinalEncoder, minmax_scale
-from sklearn.model_selection import train_test_split
 import torch
 import numpy as np
 import random
-from typing import Tuple
 
 class GranPyDataset(InMemoryDataset):
     """ Abstract class that governs the joint behaviours of all datasets in granPy, such as datset naming an storage behaviour.
@@ -23,7 +21,7 @@ class GranPyDataset(InMemoryDataset):
         self.val_fraction = opts.val_fraction
         super().__init__(root)
 
-        self.train_data, self.val_data, self.test_data, self.pot_net, self.pot_net_masks = torch.load(self.processed_paths[0])
+        self.train_data, self.val_data, self.test_data = torch.load(self.processed_paths[0])
 
     @property
     def processed_dir(self) -> str:
@@ -60,10 +58,11 @@ class GranPyDataset(InMemoryDataset):
 
         train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed)
 
-        pot_net = self.construct_pot_net(edgelist)
-        pot_net_masks = self.split_pot_net(pot_net[0])
+        train_data.pot_net = self.construct_pot_net(train_data)
+        val_data.pot_net = self.construct_pot_net(val_data)
+        test_data.pot_net = self.construct_pot_net(test_data)
 
-        torch.save([train_data, val_data, test_data, pot_net, pot_net_masks], self.processed_paths[0])
+        torch.save([train_data, val_data, test_data], self.processed_paths[0])
 
     @classmethod
     def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None):
@@ -78,7 +77,7 @@ class GranPyDataset(InMemoryDataset):
 
         seed_everything(test_seed)
 
-        traintest_split = RandomLinkSplit(num_val=0, num_test=test_fraction, is_undirected=False, add_negative_train_samples=True)
+        traintest_split = RandomLinkSplit(num_val=0, num_test=test_fraction, is_undirected=False, add_negative_train_samples=False)
 
         trainval_data, _, test_data = traintest_split(data)
 
@@ -86,87 +85,62 @@ class GranPyDataset(InMemoryDataset):
 
         seed_everything(val_seed)
 
-        trainval_split = RandomLinkSplit(num_val=real_val_frac, num_test=0, is_undirected=False, add_negative_train_samples=True)
+        trainval_split = RandomLinkSplit(num_val=real_val_frac, num_test=0, is_undirected=False, add_negative_train_samples=False)
 
         data.edge_index = trainval_data.edge_index
 
         train_data, val_data, _ = trainval_split(data)
+        
+        train_data.pos_edges = train_data.edge_index
+        train_data.known_edges = train_data.edge_index
+        train_data.known_edges_label = torch.ones(train_data.known_edges.shape[1])
+        
+        val_data.pos_edges = val_data.edge_label_index[:, val_data.edge_label == 1]
+        val_data.known_edges = torch.hstack((train_data.known_edges, val_data.pos_edges))
+        val_data.known_edges_label = torch.hstack((1-train_data.known_edges_label, torch.ones(val_data.pos_edges.shape[1])))
+        
+        test_data.pos_edges = test_data.edge_label_index[:, test_data.edge_label == 1]
+        test_data.known_edges = torch.hstack((val_data.known_edges, test_data.pos_edges))
+        test_data.known_edges_label = torch.hstack((1-val_data.known_edges_label, torch.ones(test_data.pos_edges.shape[1])))
 
         return train_data, val_data, test_data
 
     @classmethod
-    def construct_pot_net(self, all_pos_edges: torch.LongTensor) -> Tuple[torch.LongTensor, torch.LongTensor, torch.LongTensor]:
+    def construct_pot_net(self, data) -> torch.LongTensor:
         """ Constructs the potential network between transcription factors and targets by connecting each TF to each target
             careful, has memory complexity of n*m where n is the number of tfs and m is the number of targets
 
             Returns only negative edges and a tf mask by which the edges can be batched to their tfs.
             """
 
-        all_pos_edges = pyg_utils.coalesce(all_pos_edges)
+        all_pos_edges = pyg_utils.coalesce(data.known_edges)
 
         tfs, num_targets_per_tf = all_pos_edges[0, :].unique(return_counts=True)
 
-        targets = all_pos_edges[1, :].unique()
+        targets = torch.arange(data.num_nodes)
 
-        tfs_repeated = tfs.repeat_interleave(repeats=targets.shape[0]).unsqueeze(0)
+        tfs_repeated = tfs.repeat_interleave(repeats=data.num_nodes).unsqueeze(0)
 
-        tf_batches = tfs.repeat_interleave(repeats=targets.shape[0])
+        tf_batches = tfs.repeat_interleave(repeats=data.num_nodes)
 
         targets_tiled = targets.tile((tfs.shape[0],)).unsqueeze(0)
 
         all_pot_net_edges, tf_batches = pyg_utils.remove_self_loops(torch.vstack((tfs_repeated, targets_tiled)), edge_attr=tf_batches)
-        all_pot_net_edges, tf_batches = pyg_utils.coalesce(all_pot_net_edges, edge_attr=tf_batches)
 
         mask = torch.cat((tf_batches + 1, -1 * torch.ones((all_pos_edges.shape[1],))))
-        reduced_edges, pos_and_batch_mask = pyg_utils.coalesce(torch.hstack((all_pot_net_edges, all_pos_edges)), mask, reduce="mul")
+        reduced_edges, neg_batch_mask = pyg_utils.coalesce(torch.hstack((all_pot_net_edges, all_pos_edges)), mask, reduce="mul")
 
-        pos_mask = pos_and_batch_mask > 0
+        neg_mask = neg_batch_mask > 0
+        neg_edges = reduced_edges[:, neg_mask]
 
-        neg_edges = reduced_edges[:, pos_mask]
-        batch_mask = pos_and_batch_mask[pos_mask]
-
-        return [neg_edges, batch_mask.abs().long() - 1, tfs]
+        return neg_edges
     
-    @classmethod
-    def split_pot_net(self, neg_edges, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None) -> dict:
-        
-        if val_seed is None:
-            val_seed = random.randint(0, 100)
-
-        if test_seed is None:
-            test_seed = random.randint(0, 100)
-
-        n_test_selection = int(test_fraction * neg_edges.shape[1])
-        n_val_selection = int(val_fraction * neg_edges.shape[1])
-
-        seed_everything(test_seed)
-
-        perm_indices = torch.randperm(neg_edges.shape[1])
-
-        test_indices = perm_indices[:n_test_selection]
-        val_indices = perm_indices[n_test_selection:n_test_selection+n_val_selection]
-        train_indices = perm_indices[n_test_selection+n_val_selection:]
-
-        train_mask = torch.zeros((neg_edges.shape[1],)).bool()
-        val_mask = torch.zeros((neg_edges.shape[1],)).bool()
-        test_mask = torch.zeros((neg_edges.shape[1],)).bool()
-
-        train_mask[train_indices] = 1
-        val_mask[val_indices] = 1
-        test_mask[test_indices] = 1
-
-        return {"train": train_mask, "val": val_mask, "test": test_mask}
-
     def to(self, device):
-        # for data_name in ["train_data", "val_data", "test_data", "pot_net"]:
+        # for data_name in ["train_data", "val_data", "test_data"]:
         #    self.__setattr__(data_name, self.__getattr__(data_name).to(device))
         self.train_data = self.train_data.to(device)
         self.test_data = self.test_data.to(device)
         self.val_data = self.val_data.to(device)
-        self.pot_net[0] = self.pot_net[0].to(device)
-        self.pot_net[1] = self.pot_net[1].to(device)
-        self.pot_net[2] = self.pot_net[2].to(device)
-        self.pot_net_masks = {key: value.to(device) for key, value in self.pot_net_masks.items()}
 
 
 class McCallaDataset(GranPyDataset):

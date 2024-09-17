@@ -62,23 +62,74 @@ class opts:
                 setattr(self, key, value)
 
 
-def get_hash(opts):
+def dataset_hash_keys():
+    keys = [
+        'val_seed',
+        'canonical_test_seed',
+        'val_fraction',
+        "test_fraction",
+        "root",
+        "dataset"
+        ]
+    
+    return keys
+
+
+def model_hash_keys():
+    keys = dataset_hash_keys()
+    keys += [
+        "n_conv_layers",
+        "activation_layer",
+        "dropout_ratio",
+        "mplayer",
+        "mplayer_args",
+        "mplayer_kwargs",
+        "latent_dim",
+        "layer_ratio",
+        "model_path",
+        "lr",
+        "es_patience",
+        "decoder",
+        "model",
+        "encoder",
+        "val_mode",
+        "val_metric",
+        "test_metrics",
+        "epochs",
+        "negative_sampling"
+    ]
+
+    return keys
+
+
+def get_dataset_hash(opts):
+
+    include = dataset_hash_keys()
+    
+    return hash(opts, include)
+
+
+def get_model_hash(opts):
+
+    include = model_hash_keys()
+
+    return hash(opts, include)
+
+
+def hash(dataclass_object, include):
     import hashlib
     # inspired by https://death.andgravity.com/stable-hashing
-    """
-    fields = dataclasses.fields(opts)
 
-    include = ['norm_file', 'grn_file', 'seed']  # General settings
-    include += ['only_HVG', 'remove_isolated_genes', 'val_ratio', 'test_ratio']  # GRN preprocessing
+    fields = dataclasses.fields(dataclass_object)
 
     rv = {}
     for field in fields:
         if field.name in include:
-            value = getattr(opts, field.name)
+            value = getattr(dataclass_object, field.name)
             if value is None or not value:
                 continue
             rv[field.name] = value
-    """
+
     m = hashlib.blake2b(digest_size=5)
-    m.update(str(opts.__dict__).encode("utf-8"))
+    m.update(str(rv).encode("utf-8"))
     return m.hexdigest()

@@ -1,17 +1,15 @@
 from src.datasets import DatasetBootstrapper
 import src.nn.models as models
-from src.utils import get_hash
-from src.negative_sampling import structured_negative_sampling
+from src.utils import get_dataset_hash, get_model_hash
+from src.negative_sampling import neg_sampling
 import torch
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
 import torch.optim.lr_scheduler as lr_scheduler
-from torch_geometric.utils import to_undirected, k_hop_subgraph, coalesce, is_undirected, negative_sampling, remove_self_loops, coalesce
 import os
 import sklearn.metrics as skmetrics
 import copy
 from tqdm import tqdm
-from torch.nn.functional import sigmoid
 import numpy as np
 import wandb
 import uuid
@@ -20,10 +18,10 @@ class Experiment:
     def __init__(self, opts):
         self.opts = opts
 
-        # TODO: get model hash and dataset hash? To save processing same dataset for different models?
-        self.hash = get_hash(opts)
+        self.model_hash = get_model_hash(opts)
+        self.dataset_hash = get_dataset_hash(opts)
 
-        self.dataset = DatasetBootstrapper(opts, hash=self.hash).get_dataset()
+        self.dataset = DatasetBootstrapper(opts, hash=self.dataset_hash).get_dataset()
 
         self.dataset.to(self.devices[0])
 
@@ -73,10 +71,10 @@ class Experiment:
         self.eval_step(target="test")
 
         if self.opts.score_batched:
-            self.test_performance = self.score_batched(self.dataset.test_data, self.dataset.pot_net, self.opts.test_metrics)
+            self.test_performance = self.score_batched(self.dataset.test_data, self.opts.test_metrics)
         if self.opts.wandb_tracking and wandb.run is not None:
             if self.opts.wandb_save_model:
-                wandb.run.log_model(path=os.path.join(self.opts.model_path, self.hash + ".pt"))
+                wandb.run.log_model(path=os.path.join(self.opts.model_path, self.model_hash + ".pt"))
             wandb.log(self.test_performance)
             wandb.finish()
 
@@ -88,7 +86,7 @@ class Experiment:
 
         data = self.dataset.train_data
 
-        loss, _, _ = self.get_loss(data, target="train")
+        loss, _, _ = self.get_loss(data)
 
         if loss.requires_grad:
 
@@ -107,7 +105,7 @@ class Experiment:
 
         data = getattr(self.dataset, "{}_data".format(target))
 
-        loss, pos_out, neg_out = self.get_loss(data, target)
+        loss, pos_out, neg_out = self.get_loss(data)
 
         if target == "val":
             value = self.get_metric(pos_out, neg_out, [self.opts.val_metric])[self.opts.val_metric]
@@ -128,12 +126,12 @@ class Experiment:
         else:
             return self.best_val_performance > value
     
-    def get_loss(self, data, target):
+    def get_loss(self, data):
         z = self.model.encode(data.x, data.edge_index)
 
-        pos_out = self.model.decode(z, data.edge_index, pos_edge_index=data.edge_index)
+        pos_out = self.model.decode(z, data.pos_edges, pos_edge_index=data.edge_index)
 
-        neg_edges = self.get_negative_edges(data, target)
+        neg_edges = self.get_negative_edges(data)
 
         neg_out = self.model.decode(z, neg_edges, pos_edge_index=data.edge_index)
 
@@ -148,11 +146,11 @@ class Experiment:
         }
         if not os.path.exists(os.path.dirname(self.opts.model_path)):
             os.makedirs(os.path.dirname(self.opts.model_path))
-        torch.save(state_dict, os.path.join(self.opts.model_path, self.hash + ".pt"))
+        torch.save(state_dict, os.path.join(self.opts.model_path, self.model_hash + ".pt"))
 
     def load_model(self, path=None):
         '''loads a state dict either from the current run or from a given path'''
-        path = os.path.join(self.opts.model_path, self.hash + ".pt")
+        path = os.path.join(self.opts.model_path, self.model_hash + ".pt")
         if torch.cuda.is_available():
             try:
                 state_dict = torch.load(path)
@@ -182,40 +180,33 @@ class Experiment:
 
         return values
 
-    def get_negative_edges(self, data, target):
-        if self.opts.negative_sampling == "structured":
-            return structured_negative_sampling(data)
-
-        elif self.opts.negative_sampling == "pot_net":
-            import random
-            # todo: split this into train, test and val as well
-            mask = self.dataset.pot_net_masks[target]
-            try:
-                sample_indices = random.sample(range(self.dataset.pot_net[0][:, mask].shape[1]), data.edge_index.shape[1])
-            except ValueError:
-                # in case our negative set is smaller than the positive set, which can happen for test and val
-                sample_indices = range(self.dataset.pot_net[0][:, mask].shape[1])
-            return self.dataset.pot_net[0][:, mask][:, sample_indices]
+    def get_negative_edges(self, data):
+        if self.opts.negative_sampling.lower() == "structured_tail":
+            return neg_sampling(data, space="pot_net", type="tail")
+        elif self.opts.negative_sampling.lower() == "structured_head_or_tail":
+            return neg_sampling(data, space="full", type="head_or_tail")
+        elif self.opts.negative_sampling.lower() == "pot_net":
+            return neg_sampling(data, space="pot_net", type="random")
+        elif self.opts.negative_sampling.lower() == "random":
+            return neg_sampling(data, space="full", type="random")
         else:
-            return negative_sampling(data.edge_index, num_nodes=data.x.shape[0] - 1)
+            raise ValueError("Available Negative Sampling Types are structured_tail, structured_head_or_tail, pot_net and random. you have chosen {}".format(self.opts.negative_sampling))
 
-    def score_batched(self, data, pot_net, metrics):
+    def score_batched(self, data, metrics):
         self.model.eval()
         self.model.zero_grad()
 
         z = self.model.encode(data.x, data.edge_index)
 
-        directed_pos_edges, pos_edges_batch_index = self.batch_pos_edges_by_tf(data.edge_label_index[:, data.edge_label == 1], pot_net)
+        pos_out = self.model.decode(z, data.pos_edges)
+        neg_out = self.model.decode(z, data.pot_net)
 
-        pos_out = self.model.decode(z, directed_pos_edges)
-        neg_out = self.model.decode(z, pot_net[0])
-
-        total_indices = torch.cat((pos_edges_batch_index, pot_net[1])).unique().tolist()
+        total_indices = torch.cat((data.pos_edges[0, :], data.pot_net[0, :])).unique().tolist()
 
         values = {metric: [] for metric in metrics}
         for tf in total_indices:
-            pos = pos_out[pos_edges_batch_index == tf]
-            neg = neg_out[pot_net[1] == tf]
+            pos = pos_out[data.pos_edges[0, :] == tf]
+            neg = neg_out[data.pot_net[0, :] == tf]
 
             if len(pos) == 0 or len(neg) == 0:
                 continue
@@ -228,24 +219,6 @@ class Experiment:
                 values[metric].append(function(y_true=labels, y_score=scores))
 
         return {metric: np.mean(list_of_values) for metric, list_of_values in values.items()}
-
-    @classmethod
-    def batch_pos_edges_by_tf(self, edge_index, pot_net):
-
-        pos_edges = edge_index.clone()
-
-        if not is_undirected(pos_edges):
-            pos_edges = to_undirected(pos_edges)
-
-        pos_edges = coalesce(pos_edges)
-
-        _, directed_pos_edges, _, _ = k_hop_subgraph(pot_net[2], 1, pos_edges, relabel_nodes=False, directed=True, flow="target_to_source")
-
-        pos_edges_tfs, num_pos_edges_per_tf = directed_pos_edges[0, :].unique(return_counts=True)
-    
-        pos_edges_batch_index = pos_edges_tfs.repeat_interleave(num_pos_edges_per_tf)
-
-        return directed_pos_edges, pos_edges_batch_index
 
     @property
     def devices(self):
