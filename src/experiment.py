@@ -53,9 +53,6 @@ class Experiment:
             except FileNotFoundError:
                 self.opts.cache_model = False
         if not self.opts.cache_model:
-            if self.opts.wandb_tracking: 
-                wandb.init(project=self.opts.wandb_project, entity="scialdonelab", save_code=True, group=self.opts.wandb_group,
-                           config=wandb.helper.parse_config(self.opts, exclude=('root', 'model_path', 'wandb_tracking', 'wandb_project', 'wandb_save_model', 'wandb_group')))
             if not eval_only:
                 for epoch in (pbar := tqdm(range(self.opts.epochs))):
                     pbar.set_description("Best {}: {}".format(self.opts.val_metric, self.best_val_performance))
@@ -76,7 +73,8 @@ class Experiment:
             if self.opts.wandb_save_model:
                 wandb.run.log_model(path=os.path.join(self.opts.model_path, self.model_hash + ".pt"))
             wandb.log(self.test_performance)
-            wandb.finish()
+        if not self.opts.cache_model:
+            self.delete_model()
 
         return self.test_performance
 
@@ -147,6 +145,13 @@ class Experiment:
         if not os.path.exists(os.path.dirname(self.opts.model_path)):
             os.makedirs(os.path.dirname(self.opts.model_path))
         torch.save(state_dict, os.path.join(self.opts.model_path, self.model_hash + ".pt"))
+        
+    def delete_model(self):
+        try:
+            path = os.path.join(self.opts.model_path, self.model_hash + ".pt")
+            os.remove(path)
+        except: 
+            print("Model could not be deleted - maybe it does not exist")
 
     def load_model(self, path=None):
         '''loads a state dict either from the current run or from a given path'''

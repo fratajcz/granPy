@@ -1,7 +1,9 @@
 from src.experiment import ExperimentArray
-from src.utils import opts
 import pandas as pd
-
+from src.utils import opts
+from src.experiment import Experiment
+import wandb
+import argparse
 
 class TrainingPipeline:
     def __init__(self, opts):
@@ -25,11 +27,40 @@ class TrainingPipeline:
         df_t["mean"] = df_t.mean(axis=1)
 
         return df_t
+    
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset', type=str)
+    parser.add_argument('--n_conv_layers', type=int)
+    parser.add_argument('--dropout_ratio', type=float)
+    parser.add_argument('--mplayer', type=str)
+    parser.add_argument('--latent_dim', type=int)
+    parser.add_argument('--layer_ratio', type=int)
+    parser.add_argument('--decoder', type=str)
+    parser.add_argument('--model', type=str)
+    parser.add_argument('--encoder', type=str)
+    parser.add_argument('--lr', type=float)
+    parser.add_argument('--es_patience', type=int)
+    parser.add_argument('--val_mode', type=str)
+    parser.add_argument('--epochs', type=int)
+    parser.add_argument('--negative_sampling', type=str)
+    parser.add_argument('--cuda', type=str)
+    
+    args = parser.parse_args()
+    args_dict = {k: v for k, v in vars(args).items() if v is not None}
+    
+    args_dict["cuda"] = False if args_dict["cuda"] == "False" else True
+    print(args_dict)
 
-
+    return args_dict
+    
 if __name__ == "__main__":
-    pipeline = TrainingPipeline(opts())
-    df = pipeline.run()
-    df_t = df.transpose()
-    df_t["mean"] = df_t.mean(axis=1)
-    print(df_t)
+    
+    _opts = opts(parse_args())
+    wandb.init(project=_opts.wandb_project, entity="scialdonelab", save_code=True, group=_opts.wandb_group,
+                           config=wandb.helper.parse_config(_opts, exclude=('root', 'model_path', 'wandb_tracking', 'wandb_project', 'wandb_save_model', 'wandb_group')))
+    
+    experiment = Experiment(_opts)
+    experiment.run()
+    
+    wandb.finish()

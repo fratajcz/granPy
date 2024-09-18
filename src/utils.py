@@ -1,66 +1,58 @@
 import dataclasses
-
+from typing import List, Dict
 
 @dataclasses.dataclass
-class opts:
-    # TODO: need to check what we need
-    root: str = './'
-    norm_path: str = './'
-    grn_path: str = './'
-
-    norm_file: str = 'gasch_GSE102475.csv'
-    grn_file: str = 'yeast_KDUnion.txt'
-
-    seed: int = 45
-    use_cuda: bool = False
-    wandb: bool = False
-
-    no_features: bool = False
-    log_features: bool = True
-    cells_min_genes: int = 200  # e.g. 200
-    normalize_library: bool = False
-    genes_unit_variance: bool = True
-    scaler: str = 'None'  # MinMaxScaler, StandardScaler or None
-
-    add_eye: bool = False
-    add_metacells: bool = False
-    add_binary_feat: bool = False
-    add_random_feat: int = 1000
-    add_stats_feat: bool = True
-    add_node2vec: bool = False
-    add_TF_id: bool = True
-
-    genes_min_cells: int = 3  # e.g. 3
-    only_HVG: int = 500  # e.g.500
-    remove_isolated_genes: bool = True
-    remove_isolated_train_genes: bool = False
-
-    val_ratio: float = 0.5
-    test_ratio: float = 0.5
-    fixed_ground_truth_ratio: float = 0
-
-    epochs: int = 200
-    early_stopping: int = 10
-    es_metric: str = 'map_tf'  # early stopping metric: ['aupr', 'map_tf', 'map_pot_net']
-    learning_rate: float = 0.0001
-    weight_decay: float = 0.1758358134292286  # L2 regularization
-    lambda_l1: float = 0.3386477958091192  # L1 regularization
-    dropout_rate: float = 0.3025696329167428
-
-    train_edge_dropout: float = 0.1939705451217022
-    sampling: str = 'pot_net_full'  # for backprop and early stopping: ['random', 'structured', 'pot_net', 'pot_net_full']
-
-    layers: int = 1  # [1, 2, 3]
-    latent_dim: int = 87
-    layer_ratio: float = 9.126499113087188  # >1
-    decoder: str = 'InnerProductDecoder'  # CosineDecoder, InnerProductDecoder, PNormDecoder
-    p: int = 2  # relevant for PNormDecoder
-
+class opts():
+    # Data parameters
+    root: str = dataclasses.field(default="./data/")
+    dataset: str = dataclasses.field(default=None)
+    val_seed: int = dataclasses.field(default=0)
+    canonical_test_seed: int = dataclasses.field(default=0)
+    val_fraction: float = dataclasses.field(default=0.2)
+    test_fraction: float = dataclasses.field(default=0.2)
+    undirected: bool = dataclasses.field(default=False)
+    
+    # Model parameters
+    n_conv_layers: int = dataclasses.field(default=None)
+    activation_layer: str = dataclasses.field(default="ReLU")
+    dropout_ratio: float = dataclasses.field(default=None)
+    mplayer: str = dataclasses.field(default=None)
+    mplayer_args: List[str] = dataclasses.field(default=None)
+    mplayer_kwargs: Dict = dataclasses.field(default=None)
+    latent_dim: int = dataclasses.field(default=None)
+    layer_ratio: int = dataclasses.field(default=None)
+    decoder: str = dataclasses.field(default=None)
+    model: str = dataclasses.field(default=None)
+    encoder: str = dataclasses.field(default=None)
+    model_path: str = dataclasses.field(default='./models/')
+    
+    # Training/Evaluation parameters
+    lr: float = dataclasses.field(default=0.001)
+    es_patience: int = dataclasses.field(default=10)
+    val_mode: str = dataclasses.field(default=None)
+    val_metric: str = dataclasses.field(default="average_precision_score")
+    test_metrics: List[str] = dataclasses.field(default=None)
+    n_folds: int = dataclasses.field(default=5)
+    epochs: int = dataclasses.field(default=500)
+    negative_sampling: str = dataclasses.field(default=None)
+    score_batched: bool = dataclasses.field(default=False)
+    
+    # General settings
+    cuda: bool = dataclasses.field(default=True)
+    wandb_tracking: bool = dataclasses.field(default=True)
+    wandb_project: str = dataclasses.field(default='granpy-dev')
+    wandb_save_model: bool = dataclasses.field(default=False)
+    wandb_group: str = dataclasses.field(default=None)
+    cache_model: bool = dataclasses.field(default=False)
+    
     def __init__(self, new):
+        setattr(self, "test_metrics", ["average_precision_score", "roc_auc_score"])
+        setattr(self, "mplayer_args", [])
+        setattr(self, "mplayer_kwargs", {})
         for key, value in new.items():
             if hasattr(self, key):
                 setattr(self, key, value)
-
+                
 
 def dataset_hash_keys():
     keys = [
@@ -68,8 +60,8 @@ def dataset_hash_keys():
         'canonical_test_seed',
         'val_fraction',
         "test_fraction",
-        "root",
-        "dataset"
+        "dataset",
+        "undirected"
         ]
     
     return keys

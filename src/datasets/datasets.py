@@ -19,6 +19,7 @@ class GranPyDataset(InMemoryDataset):
         self.canonical_test_seed = opts.canonical_test_seed
         self.test_fraction = opts.test_fraction
         self.val_fraction = opts.val_fraction
+        self.undirected = opts.undirected
         super().__init__(root)
 
         self.train_data, self.val_data, self.test_data = torch.load(self.processed_paths[0])
@@ -56,7 +57,7 @@ class GranPyDataset(InMemoryDataset):
                     edge_index=edgelist,
                     num_nodes=features.shape[0])
 
-        train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed)
+        train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed, self.undirected)
 
         train_data.pot_net = self.construct_pot_net(train_data)
         val_data.pot_net = self.construct_pot_net(val_data)
@@ -65,7 +66,7 @@ class GranPyDataset(InMemoryDataset):
         torch.save([train_data, val_data, test_data], self.processed_paths[0])
 
     @classmethod
-    def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None):
+    def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None, undirected=False):
 
         data = data.clone()
         
@@ -77,7 +78,7 @@ class GranPyDataset(InMemoryDataset):
 
         seed_everything(test_seed)
 
-        traintest_split = RandomLinkSplit(num_val=0, num_test=test_fraction, is_undirected=False, add_negative_train_samples=False)
+        traintest_split = RandomLinkSplit(num_val=0, num_test=test_fraction, is_undirected=undirected, add_negative_train_samples=False)
 
         trainval_data, _, test_data = traintest_split(data)
 
@@ -85,7 +86,7 @@ class GranPyDataset(InMemoryDataset):
 
         seed_everything(val_seed)
 
-        trainval_split = RandomLinkSplit(num_val=real_val_frac, num_test=0, is_undirected=False, add_negative_train_samples=False)
+        trainval_split = RandomLinkSplit(num_val=real_val_frac, num_test=0, is_undirected=undirected, add_negative_train_samples=False)
 
         data.edge_index = trainval_data.edge_index
 
