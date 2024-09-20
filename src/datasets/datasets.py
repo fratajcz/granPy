@@ -150,10 +150,10 @@ class McCallaDataset(GranPyDataset):
         self.features = features
         self.name = opts.dataset
 
-        self.name2edgelist = {"zhao": "gold_standards/mESC/mESC_chipunion.txt",
-                              "jackson": "gold_standards/yeast/yeast_KDUnion.txt",
-                              "shalek": "gold_standards/mDC/mDC_chipunion.txt",
-                              "han": "gold_standards/hESC/hESC_chipunion.txt",
+        self.name2edgelist = {"zhao": f"gold_standards/mESC/mESC_{opts.groundtruth}.txt",
+                              "jackson": f"gold_standards/yeast/yeast_{opts.groundtruth}.txt",
+                              "shalek": f"gold_standards/mDC/mDC_{opts.groundtruth}.txt",
+                              "han": f"gold_standards/hESC/hESC_{opts.groundtruth}.txt",
                               "mccallatest": "edgelist.csv"}
         
         self.name2featuretable = {"zhao": "expression_data/normalized/zhao_GSE114952.csv.gz",

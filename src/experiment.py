@@ -13,6 +13,7 @@ from tqdm import tqdm
 import numpy as np
 import wandb
 import uuid
+from wandb import Api
 
 class Experiment:
     def __init__(self, opts):
@@ -48,7 +49,8 @@ class Experiment:
 
     def run(self, eval_only=False):
         
-        if self.opts.cache_model:
+        self.cached_model = os.path.exists(os.path.join(self.opts.model_path, self.model_hash + ".pt"))
+        if self.opts.cache_model and self.cached_model:
             try: self.load_model()
             except FileNotFoundError:
                 self.opts.cache_model = False
@@ -67,13 +69,13 @@ class Experiment:
 
         self.eval_step(target="test")
 
-        if self.opts.score_batched:
-            self.test_performance = self.score_batched(self.dataset.test_data, self.opts.test_metrics)
         if self.opts.wandb_tracking and wandb.run is not None:
-            if self.opts.wandb_save_model:
-                wandb.run.log_model(path=os.path.join(self.opts.model_path, self.model_hash + ".pt"))
             wandb.log(self.test_performance)
-        if not self.opts.cache_model:
+            wandb.run.summary[f"val_{self.opts.val_metric}"] = self.best_val_performance
+            if self.opts.wandb_save_model:
+                self.log_model()
+            
+        if not self.opts.cache_model and not self.cached_model:
             self.delete_model()
 
         return self.test_performance
@@ -115,7 +117,10 @@ class Experiment:
             self.lrscheduler.step(loss)
             return did_improve
         elif target == "test":
-            self.test_performance = self.get_metric(pos_out, neg_out, self.opts.test_metrics)
+            if self.opts.score_batched:
+                self.test_performance = self.score_batched(self.dataset.test_data, self.opts.test_metrics)
+            else:
+                self.test_performance = self.get_metric(pos_out, neg_out, self.opts.test_metrics)
         return
     
     def is_best_val_performance(self, value):
@@ -152,6 +157,16 @@ class Experiment:
             os.remove(path)
         except: 
             print("Model could not be deleted - maybe it does not exist")
+            
+    def log_model(self):
+        if wandb.run.sweep_id is not None:
+            api = wandb.Api()
+            sweep = api.sweep(f"scialdonelab/{self.opts.wandb_project}/sweeps/{wandb.run.sweep_id}")
+            best_score = sweep.best_run().summary[sweep.config["metric"]["name"]]
+            if self.best_val_performance >= best_score:
+                wandb.run.log_model(path=os.path.join(self.opts.model_path, self.model_hash + ".pt"))
+        else:
+            wandb.run.log_model(path=os.path.join(self.opts.model_path, self.model_hash + ".pt"))
 
     def load_model(self, path=None):
         '''loads a state dict either from the current run or from a given path'''

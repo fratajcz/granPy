@@ -3,6 +3,7 @@ from typing import List, Dict
 
 @dataclasses.dataclass
 class opts():
+        
     # Data parameters
     root: str = dataclasses.field(default="./data/")
     dataset: str = dataclasses.field(default=None)
@@ -11,6 +12,7 @@ class opts():
     val_fraction: float = dataclasses.field(default=0.2)
     test_fraction: float = dataclasses.field(default=0.2)
     undirected: bool = dataclasses.field(default=False)
+    groundtruth: str = dataclasses.field(default="chipunion")
     
     # Model parameters
     n_conv_layers: int = dataclasses.field(default=None)
@@ -41,9 +43,9 @@ class opts():
     cuda: bool = dataclasses.field(default=True)
     wandb_tracking: bool = dataclasses.field(default=True)
     wandb_project: str = dataclasses.field(default='granpy-dev')
-    wandb_save_model: bool = dataclasses.field(default=False)
+    wandb_save_model: bool = dataclasses.field(default=True)
     wandb_group: str = dataclasses.field(default=None)
-    cache_model: bool = dataclasses.field(default=False)
+    cache_model: bool = dataclasses.field(default=False)    
     
     def __init__(self, new):
         setattr(self, "test_metrics", ["average_precision_score", "roc_auc_score"])
@@ -61,7 +63,8 @@ def dataset_hash_keys():
         'val_fraction',
         "test_fraction",
         "dataset",
-        "undirected"
+        "undirected",
+        "groundtruth"
         ]
     
     return keys

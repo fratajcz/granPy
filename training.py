@@ -4,6 +4,7 @@ from src.utils import opts
 from src.experiment import Experiment
 import wandb
 import argparse
+import dataclasses
 
 class TrainingPipeline:
     def __init__(self, opts):
@@ -45,6 +46,7 @@ def parse_args():
     parser.add_argument('--epochs', type=int)
     parser.add_argument('--negative_sampling', type=str)
     parser.add_argument('--cuda', type=str)
+    parser.add_argument('--groundtruth', type=str)
     
     args = parser.parse_args()
     args_dict = {k: v for k, v in vars(args).items() if v is not None}
@@ -57,10 +59,13 @@ def parse_args():
 if __name__ == "__main__":
     
     _opts = opts(parse_args())
-    wandb.init(project=_opts.wandb_project, entity="scialdonelab", save_code=True, group=_opts.wandb_group,
-                           config=wandb.helper.parse_config(_opts, exclude=('root', 'model_path', 'wandb_tracking', 'wandb_project', 'wandb_save_model', 'wandb_group')))
+    if(_opts.wandb_tracking):
+        run = wandb.init(project=_opts.wandb_project, entity="scialdonelab", save_code=True, group=_opts.wandb_group, 
+                   config=wandb.helper.parse_config(dataclasses.asdict(_opts), exclude=('root', 'model_path', 'wandb_tracking', 'wandb_project', 'wandb_save_model', 'wandb_group')))
+        #wandb.define_metric(f"val_{_opts.val_metric}", summary=_opts.val_mode)
     
     experiment = Experiment(_opts)
     experiment.run()
     
-    wandb.finish()
+    if(_opts.wandb_tracking): 
+        wandb.finish()
