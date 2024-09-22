@@ -25,10 +25,12 @@ class McCallaDatasetDownloadTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "han"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
             
 
         dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
@@ -41,10 +43,12 @@ class McCallaDatasetDownloadTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "shalek"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
 
@@ -55,10 +59,12 @@ class McCallaDatasetDownloadTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "jackson"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
 
@@ -69,10 +75,12 @@ class McCallaDatasetDownloadTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "zhao"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
 
@@ -94,10 +102,12 @@ class McCallaDatasetProcessTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "mccallatest"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="src/tests/data/", hash="abc", opts=opts(), features=False)
         edgelist = dataset.read_edgelist()
@@ -109,10 +119,12 @@ class McCallaDatasetProcessTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "mccallatest"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="src/tests/data/", hash="abc", opts=opts(), features=True)
         features = dataset.read_features()
@@ -134,10 +146,12 @@ class McCallaDatasetProcessTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "mccallatest"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="src/tests/data/", hash="abc", opts=opts(), features=True)
 
@@ -246,6 +260,8 @@ class DatasetBootstrapperTest(unittest.TestCase):
         class opts:
             root = "src/tests/data/"
             dataset = "nosuchdataset"
+            groundtruth = "chipunion"
+            undirected = False
 
         self.assertRaises(ValueError, DatasetBootstrapper, opts=opts(), hash="abc")
 
@@ -254,6 +270,8 @@ class DatasetBootstrapperTest(unittest.TestCase):
         class opts:
             root = "src/tests/data/"
             dataset = "mccallatest"
+            groundtruth = "chipunion"
+            undirected = False
 
         bootstrapper = DatasetBootstrapper(opts, hash="abs")
 
@@ -264,10 +282,12 @@ class DatasetBootstrapperTest(unittest.TestCase):
         class opts:
             root = "src/tests/data/"
             dataset = "mccallatest"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = DatasetBootstrapper(opts, hash="abs").get_dataset()
 

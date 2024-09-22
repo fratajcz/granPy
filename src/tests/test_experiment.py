@@ -3,8 +3,6 @@ import unittest
 from src.experiment import Experiment
 import shutil
 import os
-from torch_geometric.data import Data
-import torch
 from typing import List
 
 @dataclasses.dataclass
@@ -12,9 +10,8 @@ class experimentTestOpts:
     n_conv_layers = 1
     activation_layer = "ReLU"
     dropout_ratio = 0.5
-    decoder: str = "MLPDecoder"
-    model: str = "AutoEncoder"
-    encoder: str = "GAE_Encoder"
+    model = "AutoEncoder"
+    encoder = "GNNEncoder"
     mplayer = "GCNConv"
     mplayer_args = []
     mplayer_kwargs = {}
@@ -22,7 +19,9 @@ class experimentTestOpts:
     layer_ratio = 10
     root = "src/tests/data/"
     dataset = "mccallatest"
-    model_path = "src/test/models/"
+    groundtruth = ""
+    undirected = False
+    model_path = "src/tests/models/"
     lr = 1e-3
     es_patience = 5
     decoder = "InnerProductDecoder"
@@ -36,10 +35,9 @@ class experimentTestOpts:
     val_fraction = 0.2
     cuda = False
     epochs = 5
-    negative_sampling = "unstructured"
-    test_metrics: List[str] = dataclasses.field(default_factory=list)
-    cache_model: bool = False
-    wandb_tracking: bool = False
+    negative_sampling = "random"
+    cache_model= True
+    wandb_tracking= False
 
 
 class ExperimentTest(unittest.TestCase):
@@ -58,10 +56,19 @@ class ExperimentTest(unittest.TestCase):
 
         experiment.run()
 
+        dataset_path = os.path.join(_opts.root, "processed", experiment.dataset_hash + ".pt")
+        model_path = os.path.join(_opts.model_path, experiment.model_hash + ".pt")
+
         self.assertIsNotNone(experiment.test_performance)  # if it has a non-None test performance
-        dataset_path = os.path.join(_opts.root, "processed", experiment.hash + ".pt")
+        
         self.assertTrue(os.path.isfile(dataset_path))  # if it has produced its dataset
-        self.assertTrue(os.path.isfile(os.path.join(_opts.model_path, experiment.hash + ".pt")))  # if it has produced a model file
+        self.assertTrue(os.path.isfile(model_path))  # if it has produced a model file
+        
+        # remove cached files
+        if os.path.isfile(dataset_path):
+            os.remove(dataset_path)
+        if os.path.isfile(model_path):
+            os.remove(model_path)
 
     def test_run_potnet(self):
 
@@ -71,23 +78,41 @@ class ExperimentTest(unittest.TestCase):
 
         experiment.run()
 
+        dataset_path = os.path.join(_opts.root, "processed", experiment.dataset_hash + ".pt")
+        model_path = os.path.join(_opts.model_path, experiment.model_hash + ".pt")
+
         self.assertIsNotNone(experiment.test_performance)  # if it has a non-None test performance
-        dataset_path = os.path.join(_opts.root, "processed", experiment.hash + ".pt")
+        
         self.assertTrue(os.path.isfile(dataset_path))  # if it has produced its dataset
-        self.assertTrue(os.path.isfile(os.path.join(_opts.model_path, experiment.hash + ".pt")))  # if it has produced a model file
+        self.assertTrue(os.path.isfile(model_path))  # if it has produced a model file
+        
+        # remove cached files
+        if os.path.isfile(dataset_path):
+            os.remove(dataset_path)
+        if os.path.isfile(model_path):
+            os.remove(model_path)
 
     def test_run_score_batched(self):
 
         _opts = experimentTestOpts()
         _opts.score_batched = True
         experiment = Experiment(_opts)
+        
+        dataset_path = os.path.join(_opts.root, "processed", experiment.dataset_hash + ".pt")
+        model_path = os.path.join(_opts.model_path, experiment.model_hash + ".pt")
 
         experiment.run()
 
         self.assertIsNotNone(experiment.test_performance)  # if it has a non-None test performance
-        dataset_path = os.path.join(_opts.root, "processed", experiment.hash + ".pt")
+        
         self.assertTrue(os.path.isfile(dataset_path))  # if it has produced its dataset
-        self.assertTrue(os.path.isfile(os.path.join(_opts.model_path, experiment.hash + ".pt")))  # if it has produced a model file
+        self.assertTrue(os.path.isfile(model_path))  # if it has produced a model file
+        
+        # remove cached files
+        if os.path.isfile(dataset_path):
+            os.remove(dataset_path)
+        if os.path.isfile(model_path):
+            os.remove(model_path)
 
     def test_compare_performance(self):
 

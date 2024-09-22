@@ -21,7 +21,7 @@ parameters = dict(
     layer_ratio= 10,
     decoder= "MLPDecoder",
     model= "AutoEncoder",
-    encoder= "GAE_Encoder",
+    encoder= "GNNEncoder",
     model_path= "./models/",
     
     # Training/Evaluation parameters

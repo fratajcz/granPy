@@ -49,12 +49,12 @@ class Experiment:
 
     def run(self, eval_only=False):
         
-        self.cached_model = os.path.exists(os.path.join(self.opts.model_path, self.model_hash + ".pt"))
+        self.cached_model = os.path.isfile(os.path.join(self.opts.model_path, self.model_hash + ".pt"))
         if self.opts.cache_model and self.cached_model:
             try: self.load_model()
             except FileNotFoundError:
                 self.opts.cache_model = False
-        if not self.opts.cache_model:
+        if not (self.opts.cache_model and self.cached_model):
             if not eval_only:
                 for epoch in (pbar := tqdm(range(self.opts.epochs))):
                     pbar.set_description("Best {}: {}".format(self.opts.val_metric, self.best_val_performance))
@@ -162,7 +162,10 @@ class Experiment:
         if wandb.run.sweep_id is not None:
             api = wandb.Api()
             sweep = api.sweep(f"scialdonelab/{self.opts.wandb_project}/sweeps/{wandb.run.sweep_id}")
-            best_score = sweep.best_run().summary[sweep.config["metric"]["name"]]
+            try: 
+                best_score = sweep.best_run().summary[sweep.config["metric"]["name"]]
+            except:
+                best_score = 0
             if self.best_val_performance >= best_score:
                 wandb.run.log_model(path=os.path.join(self.opts.model_path, self.model_hash + ".pt"))
         else:

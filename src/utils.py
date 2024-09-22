@@ -18,7 +18,7 @@ class opts():
     n_conv_layers: int = dataclasses.field(default=None)
     activation_layer: str = dataclasses.field(default="ReLU")
     dropout_ratio: float = dataclasses.field(default=None)
-    mplayer: str = dataclasses.field(default=None)
+    mplayer: str = dataclasses.field(default="GCNConv")
     mplayer_args: List[str] = dataclasses.field(default=None)
     mplayer_kwargs: Dict = dataclasses.field(default=None)
     latent_dim: int = dataclasses.field(default=None)

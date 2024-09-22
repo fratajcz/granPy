@@ -1,5 +1,5 @@
 import unittest
-from src.nn.encoders import GAE_Encoder, MLP_Encoder
+from src.nn.encoders import GNNEncoder, MLPEncoder
 import src.nn.layers as own_layers
 import dataclasses
 import torch.nn as nn
@@ -113,7 +113,7 @@ class EncoderTest(unittest.TestCase):
             latent_dim = 32
             layer_ratio = 10
 
-        encoder = GAE_Encoder(1000, opts())
+        encoder = GNNEncoder(1000, opts())
 
         self.assertTrue(True)
 
@@ -130,7 +130,7 @@ class EncoderTest(unittest.TestCase):
             latent_dim = 32
             layer_ratio = 10
 
-        encoder = GAE_Encoder(1000, opts())
+        encoder = GNNEncoder(1000, opts())
 
         self.assertTrue(isinstance(encoder.nn[2], nn.Hardswish))
 
@@ -147,7 +147,7 @@ class EncoderTest(unittest.TestCase):
             latent_dim = 32
             layer_ratio = 10
 
-        encoder = GAE_Encoder(1000, opts())
+        encoder = GNNEncoder(1000, opts())
 
         self.assertTrue(encoder.nn[1].heads, opts().mplayer_args[0])
 
@@ -164,7 +164,7 @@ class EncoderTest(unittest.TestCase):
             latent_dim = 32
             layer_ratio = 10
 
-        encoder = GAE_Encoder(1000, opts())
+        encoder = GNNEncoder(1000, opts())
 
         self.assertTrue(encoder.nn[1].heads, opts().mplayer_kwargs["heads"])
 
@@ -182,7 +182,7 @@ class EncoderTest(unittest.TestCase):
             latent_dim = 32
             layer_ratio = 10
 
-        encoder = GAE_Encoder(1000, opts())
+        encoder = GNNEncoder(1000, opts())
 
         self.assertTrue(isinstance(encoder.nn[1], own_layers.NoneConv))
 
@@ -197,7 +197,7 @@ class EncoderTest(unittest.TestCase):
             latent_dim = 32
             layer_ratio = 10
 
-        encoder = MLP_Encoder(100, opts())
+        encoder = MLPEncoder(100, opts())
 
         x = torch.rand(5, 100)
         edge_index = torch.LongTensor([[0, 1, 3],
