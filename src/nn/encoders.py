@@ -67,7 +67,7 @@ class MLPEncoder(torch.nn.Module):
             layers.append(get_layer(opts.activation_layer)())
             layers.append(get_layer("Dropout")(opts.dropout_ratio))
 
-        elif self.n_conv_layers == 3:
+        if self.n_conv_layers == 3:
             layers.append(get_layer("Linear")(hidden2, opts.latent_dim))
             layers.append(get_layer(opts.activation_layer)())
             layers.append(get_layer("Dropout")(opts.dropout_ratio))
