@@ -13,7 +13,7 @@ from tqdm import tqdm
 import numpy as np
 import wandb
 import uuid
-from wandb import Api
+from src.diffusion import DiffusionWrapper
 
 class Experiment:
     def __init__(self, opts):
@@ -27,8 +27,13 @@ class Experiment:
         self.dataset.to(self.devices[0])
 
         self.model = getattr(models, opts.model)(input_dim=self.dataset.train_data.x.shape[1], opts=opts).to(self.devices[0])
-
-        self.loss_function = BCEWithLogitsLoss()
+        
+        self.diffusion = opts.diffusion
+        if self.diffusion:
+            self.model = DiffusionWrapper(model=self.model,opts=opts, device=self.devices[0]).to(self.devices[0])
+            self.loss_function = self.model.diff_loss
+        else:
+            self.loss_function = BCEWithLogitsLoss()
 
         self.optimizer = Adam(self.model.parameters(), lr=opts.lr)
 
@@ -83,6 +88,8 @@ class Experiment:
     def train_step(self):
         self.model.train()
         self.model.zero_grad()
+        if self.diffusion:
+            self.model.mode = "train"
 
         data = self.dataset.train_data
 
@@ -102,6 +109,8 @@ class Experiment:
         self.model.eval()
         self.model.zero_grad()
         did_improve = False
+        if self.diffusion:
+            self.model.mode = "eval"
 
         data = getattr(self.dataset, "{}_data".format(target))
 

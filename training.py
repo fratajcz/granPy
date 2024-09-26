@@ -47,11 +47,14 @@ def parse_args():
     parser.add_argument('--negative_sampling', type=str)
     parser.add_argument('--cuda', type=str)
     parser.add_argument('--groundtruth', type=str)
+    parser.add_argument('--diffusion', type=str)
+    parser.add_argument('--diffusion_steps', type=int)
     
     args = parser.parse_args()
     args_dict = {k: v for k, v in vars(args).items() if v is not None}
     
     args_dict["cuda"] = False if args_dict["cuda"] == "False" else True
+    args_dict["diffusion"] = False if args_dict["diffusion"] == "False" else True
     print(args_dict)
 
     return args_dict

@@ -27,6 +27,7 @@ class opts():
     model: str = dataclasses.field(default=None)
     encoder: str = dataclasses.field(default=None)
     model_path: str = dataclasses.field(default='./models/')
+    p: int = dataclasses.field(default=2)
     
     # Training/Evaluation parameters
     lr: float = dataclasses.field(default=0.001)
@@ -38,6 +39,8 @@ class opts():
     epochs: int = dataclasses.field(default=500)
     negative_sampling: str = dataclasses.field(default=None)
     score_batched: bool = dataclasses.field(default=False)
+    diffusion: bool = dataclasses.field(default=False)
+    diffusion_steps: int = dataclasses.field(default=100)
     
     # General settings
     cuda: bool = dataclasses.field(default=True)
@@ -91,7 +94,9 @@ def model_hash_keys():
         "val_metric",
         "test_metrics",
         "epochs",
-        "negative_sampling"
+        "negative_sampling",
+        "diffusion",
+        "diffusion_steps"
     ]
 
     return keys
