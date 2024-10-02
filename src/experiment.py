@@ -1,6 +1,6 @@
 from src.datasets import DatasetBootstrapper
 import src.nn.models as models
-from src.utils import get_dataset_hash, get_model_hash
+from src.utils import get_dataset_hash, get_model_hash, print_memory
 from src.negative_sampling import neg_sampling
 import torch
 from torch.nn import BCEWithLogitsLoss
@@ -21,22 +21,23 @@ class Experiment:
 
         self.model_hash = get_model_hash(opts)
         self.dataset_hash = get_dataset_hash(opts)
+        
+        self.device = self.devices[0]
 
         self.dataset = DatasetBootstrapper(opts, hash=self.dataset_hash).get_dataset()
+        self.dataset.to(self.device)
 
-        self.dataset.to(self.devices[0])
-
-        self.model = getattr(models, opts.model)(input_dim=self.dataset.train_data.x.shape[1], opts=opts).to(self.devices[0])
+        self.model = getattr(models, opts.model)(input_dim=self.dataset.train_data.x.shape[1], opts=opts).to(self.device)
         
         self.diffusion = opts.diffusion
         if self.diffusion:
-            self.model = DiffusionWrapper(model=self.model,opts=opts, device=self.devices[0]).to(self.devices[0])
+            self.model = DiffusionWrapper(model=self.model,opts=opts, device=self.device).to(self.device)
             self.loss_function = self.model.diff_loss
+            self.unmask_topk = opts.unmask_topk
         else:
             self.loss_function = BCEWithLogitsLoss()
 
         self.optimizer = Adam(self.model.parameters(), lr=opts.lr)
-
         self.lrscheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer)
 
         if self.opts.val_mode == "max":
@@ -47,8 +48,9 @@ class Experiment:
             raise ValueError("Validation Mode can either be max or min, but not {}".format(self.opts.val_mode))
 
         self.initial_patience = opts.es_patience
-
         self.patience = opts.es_patience
+        
+        self.binarize = opts.binarize_prediction
 
         self.test_performance = None
 
@@ -64,6 +66,8 @@ class Experiment:
                 for epoch in (pbar := tqdm(range(self.opts.epochs))):
                     pbar.set_description("Best {}: {}".format(self.opts.val_metric, self.best_val_performance))
                     self.train_step()
+                    
+                    print(f"epoch {epoch}: {print_memory(self.device)}")
 
                     if epoch % self.opts.eval_every == 0 and epoch > 0:
                         did_improve = self.eval_step(target="val")
@@ -137,13 +141,17 @@ class Experiment:
     
     def get_loss(self, data, target="train"):
         neg_edges = self.get_negative_edges(data)
-        
+                
         if self.diffusion and target != "train":
-            pos_out, neg_out = self.model.eval_edges(data.x, target=data.edge_index, pos_eval=data.pos_edges, neg_eval=neg_edges)
+            pos_out, neg_out = self.model.eval_edges(data.x, target=data.edge_index, pos_eval=data.pos_edges, neg_eval=neg_edges, unmask_topk=self.unmask_topk)
         else:
             z = self.model.encode(data.x, data.edge_index)
             pos_out = self.model.decode(z, data.pos_edges, pos_edge_index=data.edge_index)
             neg_out = self.model.decode(z, neg_edges, pos_edge_index=data.edge_index)
+            
+        if self.binarize:
+            pos_out = torch.bernoulli(pos_out)
+            neg_out = torch.bernoulli(neg_out)
 
         pos_loss = self.loss_function(pos_out, torch.ones_like(pos_out))
         neg_loss = self.loss_function(neg_out, torch.zeros_like(neg_out))

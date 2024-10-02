@@ -38,6 +38,9 @@ class experimentTestOpts:
     negative_sampling = "random"
     cache_model= True
     wandb_tracking= False
+    diffusion = False
+    binarize_prediction = False
+    eval_every = 1
 
 
 class ExperimentTest(unittest.TestCase):

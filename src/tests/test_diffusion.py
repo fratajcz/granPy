@@ -1,13 +1,9 @@
 import unittest
-from src.utils import get_model_hash, get_dataset_hash
-import dataclasses
 from src.diffusion import DiffusionWrapper, LogLinearNoise
 import src.nn.models as models
-from src.utils import opts
-from src.utils import get_dataset_hash, get_model_hash
+from src.utils import opts, get_dataset_hash
 from src.datasets import DatasetBootstrapper
 from src.negative_sampling import neg_sampling
-from src.experiment import Experiment
 import torch
 
 
@@ -103,6 +99,24 @@ class DiffusionTest(unittest.TestCase):
             if ((train_edges == e0_theta[:, i].unsqueeze(1)).all(dim=0)).any():
                 result[i] = 1
         self.assertTrue(result.all())
+        
+    def test_sample_empty_topk(self):
+        
+        num_edges=20
+        diff_model = DiffusionWrapper(model=self.model,opts=self._opts, device=self.device)
+        e0_theta = diff_model.sample(self.dataset.train_data.x, target=None, num_steps = 1, num_edges=num_edges)
+        
+        self.assertTrue(e0_theta.shape[1] == num_edges)
+        self.assertTrue((e0_theta[0] != e0_theta[1]).all())
+        
+    def test_sample_target_topk(self):
+        
+        num_edges=30
+        diff_model = DiffusionWrapper(model=self.model,opts=self._opts, device=self.device)
+        e0_theta = diff_model.sample(self.dataset.train_data.x, target=self.dataset.train_data.edge_index, num_steps = 1, num_edges=num_edges)
+        
+        self.assertTrue(e0_theta.shape[1] == num_edges + self.dataset.train_data.edge_index.shape[1])
+        self.assertTrue((e0_theta[0] != e0_theta[1]).all())
         
     def test_sample_time(self):
         diff_model = DiffusionWrapper(model=self.model,opts=self._opts, device=self.device)

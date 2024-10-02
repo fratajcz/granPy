@@ -1,5 +1,7 @@
 import dataclasses
 from typing import List, Dict
+import torch
+import psutil
 
 @dataclasses.dataclass
 class opts():
@@ -43,6 +45,8 @@ class opts():
     diffusion_steps: int = dataclasses.field(default=100)
     binarize_prediction: bool = dataclasses.field(default=False)
     eval_every: int = dataclasses.field(default=1)
+    unmask_topk: bool = dataclasses.field(default=True)
+    fixed_t: float = dataclasses.field(default=None)
     
     # General settings
     cuda: str = dataclasses.field(default="auto")
@@ -135,3 +139,10 @@ def hash(dataclass_object, include):
     m = hashlib.blake2b(digest_size=5)
     m.update(str(rv).encode("utf-8"))
     return m.hexdigest()
+
+def print_memory(device):
+    if device == "cpu":
+        return (f"RAM@{int(psutil.virtual_memory().used/ (1024.0 ** 3))}GB")
+    
+    elif device.startswith("cuda:"):
+        return (f"CUDA@{int(torch.cuda.memory_allocated(device)/ (1024.0 ** 3))}GB")
