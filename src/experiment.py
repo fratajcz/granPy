@@ -65,10 +65,11 @@ class Experiment:
                     pbar.set_description("Best {}: {}".format(self.opts.val_metric, self.best_val_performance))
                     self.train_step()
 
-                    did_improve = self.eval_step(target="val")
+                    if epoch % self.opts.eval_every == 0 and epoch > 0:
+                        did_improve = self.eval_step(target="val")
 
-                    if self.out_of_patience(did_improve):
-                        break
+                        if self.out_of_patience(did_improve):
+                            break
 
             self.load_model()
 
@@ -88,12 +89,10 @@ class Experiment:
     def train_step(self):
         self.model.train()
         self.model.zero_grad()
-        if self.diffusion:
-            self.model.mode = "train"
 
         data = self.dataset.train_data
 
-        loss, _, _ = self.get_loss(data)
+        loss, _, _ = self.get_loss(data, "train")
 
         if loss.requires_grad:
 
@@ -105,16 +104,14 @@ class Experiment:
         
         return loss
 
+    @torch.no_grad
     def eval_step(self, target):
         self.model.eval()
-        self.model.zero_grad()
         did_improve = False
-        if self.diffusion:
-            self.model.mode = "eval"
 
         data = getattr(self.dataset, "{}_data".format(target))
 
-        loss, pos_out, neg_out = self.get_loss(data)
+        loss, pos_out, neg_out = self.get_loss(data, target)
 
         if target == "val":
             value = self.get_metric(pos_out, neg_out, [self.opts.val_metric])[self.opts.val_metric]
@@ -138,14 +135,15 @@ class Experiment:
         else:
             return self.best_val_performance > value
     
-    def get_loss(self, data):
-        z = self.model.encode(data.x, data.edge_index)
-
-        pos_out = self.model.decode(z, data.pos_edges, pos_edge_index=data.edge_index)
-
+    def get_loss(self, data, target="train"):
         neg_edges = self.get_negative_edges(data)
-
-        neg_out = self.model.decode(z, neg_edges, pos_edge_index=data.edge_index)
+        
+        if self.diffusion and target != "train":
+            pos_out, neg_out = self.model.eval_edges(data.x, target=data.edge_index, pos_eval=data.pos_edges, neg_eval=neg_edges)
+        else:
+            z = self.model.encode(data.x, data.edge_index)
+            pos_out = self.model.decode(z, data.pos_edges, pos_edge_index=data.edge_index)
+            neg_out = self.model.decode(z, neg_edges, pos_edge_index=data.edge_index)
 
         pos_loss = self.loss_function(pos_out, torch.ones_like(pos_out))
         neg_loss = self.loss_function(neg_out, torch.zeros_like(neg_out))
@@ -159,14 +157,14 @@ class Experiment:
         if not os.path.exists(os.path.dirname(self.opts.model_path)):
             os.makedirs(os.path.dirname(self.opts.model_path))
         torch.save(state_dict, os.path.join(self.opts.model_path, self.model_hash + ".pt"))
-        
+       
     def delete_model(self):
         try:
             path = os.path.join(self.opts.model_path, self.model_hash + ".pt")
             os.remove(path)
         except: 
             print("Model could not be deleted - maybe it does not exist")
-            
+    
     def log_model(self):
         if wandb.run.sweep_id is not None:
             api = wandb.Api()

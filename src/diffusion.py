@@ -6,7 +6,7 @@ class DiffusionWrapper(torch.nn.Module):
         super().__init__()
         self.model = model
         self.opts = opts
-        self.eps = 1e-16
+        self.eps = torch.tensor(1e-16, dtype=torch.float32)
         self.num_steps = opts.diffusion_steps
         self.noise = LogLinearNoise(self.eps)
         self.mode = 'train'
@@ -14,41 +14,40 @@ class DiffusionWrapper(torch.nn.Module):
         
     def encode(self, x, e): 
         self.num_nodes = x.shape[0]
-        if self.mode == 'train':
             
-            # forward diffusion process
-            e0 = e
-            t = self.sample_time()
-            et, self.mask = self.mask_edges(e0, t)
-            
-            # encode masked graph
-            zt = self.model.encode(x, et)
-            return zt
+        # forward diffusion process
+        e0 = e
+        t = self.sample_time()
+        et, self.mask = self.mask_edges(e0, t)
         
-        elif self.mode == 'eval':
-            et = e
-            e0_theta = self.sample(x, target=et)
-            return e0_theta
+        # encode masked graph
+        zt = self.model.encode(x, et)
+        return zt
     
     def decode(self, zt, eval_edges, *args, **kwargs):
-        if self.mode == 'train':
-        
-            # denoising prediction
-            e0_theta = self.model.decode(zt, eval_edges, sigmoid=True)
-            return e0_theta[self.mask]
-        
-        elif self.mode == 'eval':
-            e0_theta = zt
 
-            result = torch.zeros(eval_edges.shape[1], dtype=torch.float32).to(self.device)
-            for i in range(eval_edges.shape[1]):
-                if ((e0_theta == eval_edges[:, i].unsqueeze(1)).all(dim=0)).any():
-                    result[i] = 1
-            return result
+        # denoising prediction
+        e0_theta = self.model.decode(zt, eval_edges, sigmoid=True)
+        return e0_theta[self.mask]
+    
+    @torch.no_grad
+    def eval_edges(self, x, target, pos_eval, neg_eval):
+        e0_theta = self.sample(x, target=target, num_steps=self.num_steps)
+        
+        pos_out = torch.zeros(pos_eval.shape[1], dtype=torch.float32).to(self.device)
+        for i in range(pos_eval.shape[1]):
+            if ((e0_theta == pos_eval[:, i].unsqueeze(1)).all(dim=0)).any():
+                pos_out[i] = 1
+        neg_out = torch.zeros(neg_eval.shape[1], dtype=torch.float32).to(self.device)
+        for i in range(neg_eval.shape[1]):
+            if ((e0_theta == neg_eval[:, i].unsqueeze(1)).all(dim=0)).any():
+                neg_out[i] = 1
+        return pos_out, neg_out
+
        
-    @torch.no_grad() 
-    def sample(self, x, target=None):
-        self.dt = (1 - self.eps) / self.num_steps
+    @torch.no_grad
+    def sample(self, x, target=None, num_steps=None):
+        self.dt = (1 - self.eps) / num_steps
         
         mask_t = torch.ones(x.shape[0], x.shape[0]).to(self.device)
         if target is not None:
@@ -57,8 +56,8 @@ class DiffusionWrapper(torch.nn.Module):
         else:
             et = torch.empty(2, 0).to(self.device)
             
-        for i in tqdm(range(self.num_steps)):
-            t = torch.tensor(1 - i * self.dt).to(self.device)
+        for i in tqdm(range(num_steps)):
+            t = 1 - i * self.dt.to(self.device)
             
             zt = self.model.encode(x, et)
             adj0_theta = self.model.decoder.forward_all(zt, sigmoid=True)
@@ -81,17 +80,17 @@ class DiffusionWrapper(torch.nn.Module):
         self.sigma, self.dsigma = self.noise(t)
         move_chance = 1 - torch.exp(-self.sigma)
         mask = (torch.rand(e0.shape[1]).to(self.device) < move_chance)
-        xt = e0[:,~mask]
-        return xt, mask
+        et = e0[:,~mask]
+        return et, mask
 
-    @torch.no_grad()
+    @torch.no_grad
     def unmask_edges(self, adj0_theta, mask_t, t):
         s = t - self.dt
-        sigma_t, _ = self.noise(t)
+        #sigma_t, _ = self.noise(t)
         sigma_s, _ = self.noise(s)
-        move_chance_t = 1 - torch.exp(-sigma_t)
+        #move_chance_t = 1 - torch.exp(-sigma_t)
         move_chance_s = 1 - torch.exp(-sigma_s)
-        n_unmask = int(move_chance_t - move_chance_s)
+        #n_unmask = int(move_chance_t - move_chance_s)
         
         adj0_sample = torch.bernoulli(adj0_theta).fill_diagonal_(0)
         mask_s= torch.bernoulli(torch.full_like(adj0_sample, move_chance_s)) * mask_t

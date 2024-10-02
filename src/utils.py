@@ -41,9 +41,11 @@ class opts():
     score_batched: bool = dataclasses.field(default=False)
     diffusion: bool = dataclasses.field(default=False)
     diffusion_steps: int = dataclasses.field(default=100)
+    binarize_prediction: bool = dataclasses.field(default=False)
+    eval_every: int = dataclasses.field(default=1)
     
     # General settings
-    cuda: bool = dataclasses.field(default=True)
+    cuda: str = dataclasses.field(default="auto")
     wandb_tracking: bool = dataclasses.field(default=True)
     wandb_project: str = dataclasses.field(default='granpy-dev')
     wandb_save_model: bool = dataclasses.field(default=True)
