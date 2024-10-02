@@ -7,7 +7,7 @@ class InnerProductDecoder(torch.nn.Module):
     def __init__(self, opts):
         super(InnerProductDecoder, self).__init__()
 
-    def forward(self, z, edge_index, sigmoid=True, *args, **kwargs):
+    def forward(self, z, edge_index, sigmoid=False, *args, **kwargs):
         value = (z[edge_index[0, :]] * z[edge_index[1, :]]).sum(dim=1)
         return torch.sigmoid(value) if sigmoid else value
 
@@ -17,7 +17,7 @@ class CosineDecoder(torch.nn.Module):
         super(CosineDecoder, self).__init__()
         self.cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
 
-    def forward(self, z, edge_index, sigmoid=True, *args, **kwargs):
+    def forward(self, z, edge_index, sigmoid=False, *args, **kwargs):
         value = self.cos(z[edge_index[0]], z[edge_index[1]])
         return torch.sigmoid(value) if sigmoid else value
 
@@ -28,7 +28,7 @@ class PNormDecoder(torch.nn.Module):
         self.p = opts.p
         self.pnorm = torch.nn.PairwiseDistance(p=opts.p, eps=1e-06)
 
-    def forward(self, z, edge_index, sigmoid=True, *args, **kwargs):
+    def forward(self, z, edge_index, sigmoid=False, *args, **kwargs):
         value = self.pnorm(z[edge_index[0]], z[edge_index[1]])
         return torch.sigmoid(value) if sigmoid else value
 
@@ -44,7 +44,7 @@ class MLPDecoder(torch.nn.Module):
         layers.append(torch.nn.Linear(opts.latent_dim // 2, 1))
         self.nn = torch.nn.Sequential(*layers)
 
-    def forward(self, z, edge_index, sigmoid=True, *args, **kwargs):
+    def forward(self, z, edge_index, sigmoid=False, *args, **kwargs):
         value = self.nn(torch.hstack((z[edge_index[0]], z[edge_index[1]])))
         return torch.sigmoid(value) if sigmoid else value
 
@@ -96,7 +96,7 @@ class CorrelationDecoder(torch.nn.Module):
     def __init__(self, opts):
         super(CorrelationDecoder, self).__init__()
 
-    def forward(self, z, edge_index, sigmoid=True, *args, **kwargs):
+    def forward(self, z, edge_index, sigmoid=False, *args, **kwargs):
         value = torch.corrcoef(z)[tuple(edge_index)]
         return torch.sigmoid(value) if sigmoid else value
 
