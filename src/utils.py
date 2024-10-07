@@ -41,11 +41,13 @@ class opts():
     epochs: int = dataclasses.field(default=500)
     negative_sampling: str = dataclasses.field(default=None)
     score_batched: bool = dataclasses.field(default=False)
-    diffusion: bool = dataclasses.field(default=False)
-    diffusion_steps: int = dataclasses.field(default=100)
     binarize_prediction: bool = dataclasses.field(default=False)
     eval_every: int = dataclasses.field(default=1)
     unmask_topk: bool = dataclasses.field(default=True)
+    
+    # Diffusion parameters
+    diffusion: bool = dataclasses.field(default=False)
+    diffusion_steps: int = dataclasses.field(default=100)
     fixed_t: float = dataclasses.field(default=None)
     
     # General settings
@@ -55,6 +57,7 @@ class opts():
     wandb_save_model: bool = dataclasses.field(default=True)
     wandb_group: str = dataclasses.field(default=None)
     cache_model: bool = dataclasses.field(default=False)    
+    verbose: bool = dataclasses.field(default=True)
     
     def __init__(self, new):
         setattr(self, "test_metrics", ["average_precision_score", "roc_auc_score"])
@@ -102,7 +105,10 @@ def model_hash_keys():
         "epochs",
         "negative_sampling",
         "diffusion",
-        "diffusion_steps"
+        "diffusion_steps",
+        "eval_every",
+        "unmask_topk",
+        "fixed_t"
     ]
 
     return keys

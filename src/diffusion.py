@@ -40,7 +40,7 @@ class DiffusionWrapper(torch.nn.Module):
         return e0_theta[self.mask]
     
     @torch.no_grad
-    def eval_edges(self, x, target, pos_eval, neg_eval, unmask_topk = None, binarize=True):
+    def eval_edges(self, x, target, pos_eval, neg_eval, unmask_topk=False, binarize=True):
         topk = pos_eval.shape[1] if unmask_topk else None
         e0_theta = self.sample(x, self.num_steps, target, num_edges=topk)
         
@@ -73,7 +73,8 @@ class DiffusionWrapper(torch.nn.Module):
             et = torch.empty(2, 0).to(self.device)
             
         for i in tqdm(range(num_steps)):
-            print(f"diffusion step {i}: {print_memory(self.device)}")
+            if self.opts.verbose:
+                print(f"diffusion step {i}: {print_memory(self.device)}")
             t = 1 - i * self.dt.to(self.device)
             
             zt = self.model.encode(x, et)

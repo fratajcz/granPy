@@ -67,7 +67,8 @@ class Experiment:
                     pbar.set_description("Best {}: {}".format(self.opts.val_metric, self.best_val_performance))
                     self.train_step()
                     
-                    print(f"epoch {epoch}: {print_memory(self.device)}")
+                    if self.opts.verbose:
+                        print(f"epoch {epoch}: {print_memory(self.device)}")
 
                     if epoch % self.opts.eval_every == 0 and epoch > 0:
                         did_improve = self.eval_step(target="val")
@@ -149,7 +150,7 @@ class Experiment:
             pos_out = self.model.decode(z, data.pos_edges, pos_edge_index=data.edge_index)
             neg_out = self.model.decode(z, neg_edges, pos_edge_index=data.edge_index)
             
-        if self.binarize:
+        if target != "train" and self.binarize:
             pos_out = torch.bernoulli(pos_out)
             neg_out = torch.bernoulli(neg_out)
 

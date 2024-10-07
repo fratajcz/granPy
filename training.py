@@ -49,12 +49,20 @@ def parse_args():
     parser.add_argument('--groundtruth', type=str)
     parser.add_argument('--diffusion', type=str)
     parser.add_argument('--diffusion_steps', type=int)
+    parser.add_argument('--eval_every', type=int)
+    parser.add_argument('--binarize_prediction', type=str)
+    parser.add_argument('--unmask_topk', type=str)
+    parser.add_argument('--fixed_t', type=str)
     
     args = parser.parse_args()
     args_dict = {k: v for k, v in vars(args).items() if v is not None}
     
     args_dict["cuda"] = False if args_dict["cuda"] == "False" else True
     args_dict["diffusion"] = False if args_dict["diffusion"] == "False" else True
+    args_dict["binarize_prediction"] = False if args_dict["binarize_prediction"] == "False" else True
+    args_dict["unmask_topk"] = False if args_dict["unmask_topk"] == "False" else True
+    args_dict["fixed_t"] = None if args_dict["fixed_t"] == "None" else float(args_dict["fixed_t"])
+
     print(args_dict)
 
     return args_dict
