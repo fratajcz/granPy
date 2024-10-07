@@ -64,6 +64,7 @@ class Experiment:
         if not (self.opts.cache_model and self.cached_model):
             if not eval_only:
                 for epoch in (pbar := tqdm(range(self.opts.epochs))):
+                    self.epoch = epoch
                     pbar.set_description("Best {}: {}".format(self.opts.val_metric, self.best_val_performance))
                     self.train_step()
                     
@@ -105,7 +106,7 @@ class Experiment:
 
             self.optimizer.step()
         
-        if self.opts.wandb_tracking: wandb.log({"train_loss": loss}, commit=False)
+        if self.opts.wandb_tracking: wandb.log({"train_loss": loss}, step=self.epoch)
         
         return loss
 
@@ -120,7 +121,7 @@ class Experiment:
 
         if target == "val":
             value = self.get_metric(pos_out, neg_out, [self.opts.val_metric])[self.opts.val_metric]
-            if self.opts.wandb_tracking: wandb.log({("val_" + self.opts.val_metric): value, "val_loss": loss}, commit=True)
+            if self.opts.wandb_tracking: wandb.log({("val_" + self.opts.val_metric): value, "val_loss": loss}, step=self.epoch)
             if self.is_best_val_performance(value):
                 self.best_val_performance = value
                 self.save_model()
