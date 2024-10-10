@@ -1,5 +1,5 @@
 import unittest
-from src.utils import get_hash
+from src.utils import get_model_hash, get_dataset_hash
 import dataclasses
 
 
@@ -8,16 +8,16 @@ class GetHashTest(unittest.TestCase):
 
         @dataclasses.dataclass(unsafe_hash=True)
         class opts1:
-            some_key: int = 1
-            other_key: str = "hello"
+            val_seed: int = 1
+            canonical_test_seed: str = "hello"
 
         @dataclasses.dataclass(unsafe_hash=True)
         class opts2:
-            some_key: int = 2
-            other_key: str = "hello"
+            val_seed: int = 2
+            canonical_test_seed: str = "hello"
 
-        hash1 = get_hash(opts1())
-        hash2 = get_hash(opts2())
+        hash1 = get_model_hash(opts1())
+        hash2 = get_model_hash(opts2())
 
         self.assertFalse(hash1 == hash2)
 
@@ -25,15 +25,15 @@ class GetHashTest(unittest.TestCase):
 
         @dataclasses.dataclass
         class opts1:
-            some_key: int = 1
-            other_key: str = "hello"
+            val_seed: int = 1
+            canonical_test_seed: str = "hello"
 
         @dataclasses.dataclass
         class opts2:
-            some_key: int = 1
-            other_key: str = "hello"
+            val_seed: int = 1
+            canonical_test_seed: str = "hello"
 
-        hash1 = get_hash(opts1())
-        hash2 = get_hash(opts2())
+        hash1 = get_model_hash(opts1())
+        hash2 = get_model_hash(opts2())
 
         self.assertTrue(hash1 == hash2)

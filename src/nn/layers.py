@@ -1,13 +1,10 @@
 import torch_geometric.nn as pyg_nn
-from torch_geometric.typing import (
-    Adj
-)
 import torch
 from torch_geometric.utils import degree, add_remaining_self_loops
 
 
 class NoneConv(pyg_nn.GCNConv):
-    """ Behaves just as pyg_nn.GCNConv butthe aggregation function does nothing, i.e. each node completely retains its identity """
+    """ Behaves just as pyg_nn.GCNConv but the aggregation function does nothing, i.e. each node completely retains its identity """
     def forward(self, x, edge_index):
 
         edge_index = add_remaining_self_loops(edge_index, num_nodes=x.shape[0])[0]

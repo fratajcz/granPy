@@ -1,1 +1,9 @@
-__pycache__
+.DS_Store
+/data
+artifacts
+figures
+models
+wandb
+**/__pycache__
+**/__MACOSX
+**/processed

@@ -25,10 +25,12 @@ class McCallaDatasetDownloadTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "han"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
             
 
         dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
@@ -41,10 +43,12 @@ class McCallaDatasetDownloadTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "shalek"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
 
@@ -55,10 +59,12 @@ class McCallaDatasetDownloadTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "jackson"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
 
@@ -69,10 +75,12 @@ class McCallaDatasetDownloadTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "zhao"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="test_data", hash="abc", opts=opts(), features=False)
 
@@ -94,10 +102,12 @@ class McCallaDatasetProcessTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "mccallatest"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="src/tests/data/", hash="abc", opts=opts(), features=False)
         edgelist = dataset.read_edgelist()
@@ -109,10 +119,12 @@ class McCallaDatasetProcessTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "mccallatest"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="src/tests/data/", hash="abc", opts=opts(), features=True)
         features = dataset.read_features()
@@ -134,22 +146,33 @@ class McCallaDatasetProcessTest(unittest.TestCase):
         class opts:
             root = "test_data"
             dataset = "mccallatest"
+            groundtruth = "chipunion"
             val_seed = 2
             canonical_test_seed = 1
             val_fraction = 0.2
             test_fraction = 0.2
+            undirected = False
 
         dataset = McCallaDataset(root="src/tests/data/", hash="abc", opts=opts(), features=True)
 
         # test that all pieces are there
-        for key in ["train_data", "val_data", "test_data", "pot_net"]:
+        for key in ["train_data", "val_data", "test_data"]:
             self.assertTrue(hasattr(dataset, key))
 
-        # test that in preprocessing, the graph has been converted to undirected
-
-        self.assertEqual(dataset.train_data.edge_index.shape[1], 6)
-        self.assertEqual(dataset.val_data.edge_index.shape[1], 6)
-        self.assertEqual(dataset.test_data.edge_index.shape[1], 8)
+        self.assertEqual(dataset.train_data.edge_index.shape[1], 3)  # contains only train edges
+        self.assertEqual(dataset.val_data.edge_index.shape[1], 3)  # contains only train edges
+        self.assertEqual(dataset.test_data.edge_index.shape[1], 4)  # contains train and val edges
+        
+        self.assertEqual(dataset.train_data.known_edges.shape[1], 3)  # contains only train edges
+        self.assertEqual(dataset.val_data.known_edges.shape[1], 4)  # contains train and val edges
+        self.assertEqual(dataset.test_data.known_edges.shape[1], 5)  # contains all edges
+        
+        self.assertEqual(dataset.train_data.pos_edges.shape[1], 3)  # contains only train edges
+        self.assertEqual(dataset.val_data.pos_edges.shape[1], 1)  # contains only val edges
+        self.assertEqual(dataset.test_data.pos_edges.shape[1], 1)  # contains only test edges
+        
+        for data in ["train_data", "val_data", "test_data"]:
+            self.assertTrue(getattr(getattr(dataset, data), "num_nodes"), 8)
 
         self.assertTrue(isinstance(dataset.train_data.x, torch.FloatTensor))
 
@@ -159,46 +182,37 @@ class GranPyDatasetTest(unittest.TestCase):
     def test_construct_pot_net(self):
         edge_index = torch.LongTensor([[0, 1, 2],
                                        [3, 4, 4]])
-        
-        pot_net = GranPyDataset.construct_pot_net(edge_index)
+        data = Data(known_edges=edge_index,
+                    num_nodes=5)
 
-        self.assertTrue(torch.equal(pot_net[0], torch.LongTensor([[0, 1, 2],
-                                                                  [4, 3, 3]])))
-        self.assertTrue(torch.equal(pot_net[1], torch.LongTensor([0, 1, 2])))
+        pot_net = GranPyDataset.construct_pot_net(data)
+        
+        self.assertTrue(torch.equal(pot_net, torch.LongTensor([[0, 0, 0, 1, 1, 1, 2, 2, 2],
+                                                                  [1, 2, 4, 0, 2, 3, 0, 1, 3]])))
         
     def test_construct_pot_net_with_ambivalent(self):    
-        edge_index = torch.LongTensor([[0, 0, 1, 2],
-                                       [3, 1, 4, 4]])
+        edge_index = torch.LongTensor([[0, 1, 2, 4],
+                                       [3, 4, 4, 2]])
         
-        pot_net = GranPyDataset.construct_pot_net(edge_index)
-
-        self.assertTrue(torch.equal(pot_net[0], torch.LongTensor([[0, 1, 2, 2],
-                                                                  [4, 3, 1, 3]])))
-        self.assertTrue(torch.equal(pot_net[1], torch.LongTensor([0, 1, 2, 2])))
-
-    def test_split_pot_net(self):
-        neg_edges = torch.LongTensor([[0, 1, 2, 2],
-                                      [4, 3, 1, 3]])
+        data = Data(known_edges=edge_index,
+                    num_nodes=5)
         
-        masks = GranPyDataset.split_pot_net(neg_edges=neg_edges, test_fraction=0.25, val_fraction=0.25)
+        pot_net = GranPyDataset.construct_pot_net(data)
 
-
-        self.assertEqual(masks["train"].sum() + masks["val"].sum() + masks["test"].sum(), neg_edges.shape[1])
-
-        self.assertTrue(torch.equal(masks["train"] + masks["val"] + masks["test"], torch.ones((neg_edges.shape[1],))))
-
-    def test_split_pot_net_reproducible(self):
-        neg_edges = torch.LongTensor([[0, 1, 2, 2],
-                                      [4, 3, 1, 3]])
+        self.assertTrue(torch.equal(pot_net, torch.LongTensor([[0, 0, 0, 1, 1, 1, 2, 2, 2, 4, 4, 4],
+                                                                  [1, 2, 4, 0, 2, 3, 0, 1, 3, 0, 1, 3]])))
         
-        masks = GranPyDataset.split_pot_net(neg_edges=neg_edges, test_fraction=0.25, val_fraction=0.25, test_seed=1)
-        masks_equal = GranPyDataset.split_pot_net(neg_edges=neg_edges, test_fraction=0.25, val_fraction=0.25, test_seed=1)
-        masks_unequal = GranPyDataset.split_pot_net(neg_edges=neg_edges, test_fraction=0.25, val_fraction=0.25, test_seed=2)
+    def test_construct_pot_net_with_isolated(self):    
+        edge_index = torch.LongTensor([[0, 1, 2],
+                                       [3, 4, 4]])
+        
+        data = Data(known_edges=edge_index,
+                    num_nodes=7)
+        
+        pot_net = GranPyDataset.construct_pot_net(data)
 
-
-        self.assertTrue(torch.equal(masks["train"], masks_equal["train"]))
-        self.assertFalse(torch.equal(masks["train"], masks_unequal["train"]))
-
+        self.assertTrue(torch.equal(pot_net, torch.LongTensor([[0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2],
+                                                                  [1, 2, 4, 5, 6, 0, 2, 3, 5, 6, 0, 1, 3, 5, 6]])))
 
     def test_split_data(self):
         edge_index = torch.tensor([[0, 1, 1, 2, 2, 3, 3, 4, 4, 5],
@@ -211,6 +225,17 @@ class GranPyDatasetTest(unittest.TestCase):
         self.assertEqual(train_data.edge_index.shape[1], 6)  # contains only train edges
         self.assertEqual(val_data.edge_index.shape[1], 6)  # contains only train edges
         self.assertEqual(test_data.edge_index.shape[1], 8)  # contains train and val edges
+        
+        self.assertEqual(train_data.known_edges.shape[1], 6)  # contains only train edges
+        self.assertEqual(val_data.known_edges.shape[1], 8)  # contains train and val edges
+        self.assertEqual(test_data.known_edges.shape[1], 10)  # contains all edges
+        
+        self.assertEqual(train_data.pos_edges.shape[1], 6)  # contains only train edges
+        self.assertEqual(val_data.pos_edges.shape[1], 2)  # contains only val edges
+        self.assertEqual(test_data.pos_edges.shape[1], 2)  # contains only test edges
+        
+        for data in [train_data, val_data, test_data]:
+            self.assertTrue(getattr(data, "num_nodes"), 10)
 
     def test_split_data_same_test_different_val(self):
         edge_index = torch.tensor([[0, 1, 1, 2, 2, 3, 3, 4, 4, 5],
@@ -221,15 +246,8 @@ class GranPyDatasetTest(unittest.TestCase):
         train_data_1, val_data_1, test_data_1 = GranPyDataset.split_data(data, val_seed=1, test_seed=3, test_fraction=0.2, val_fraction=0.2)
         train_data_2, val_data_2, test_data_2 = GranPyDataset.split_data(data, val_seed=2, test_seed=3, test_fraction=0.2, val_fraction=0.2)
 
-        test_edges_1 = test_data_1.edge_label_index[:, test_data_1.edge_label == 1]
-        test_edges_2 = test_data_2.edge_label_index[:, test_data_2.edge_label == 1]
-
-        self.assertTrue(torch.equal(test_edges_1, test_edges_2))
-
-        val_edges_1 = val_data_1.edge_label_index[:, val_data_1.edge_label == 1]
-        val_edges_2 = val_data_2.edge_label_index[:, val_data_2.edge_label == 1]
-
-        self.assertFalse(torch.equal(val_edges_1, val_edges_2))
+        self.assertTrue(torch.equal(test_data_1.pos_edges, test_data_2.pos_edges))
+        self.assertFalse(torch.equal(val_data_1.pos_edges, val_data_2.pos_edges))
 
 
 class DatasetBootstrapperTest(unittest.TestCase):
@@ -242,6 +260,8 @@ class DatasetBootstrapperTest(unittest.TestCase):
         class opts:
             root = "src/tests/data/"
             dataset = "nosuchdataset"
+            groundtruth = "chipunion"
+            undirected = False
 
         self.assertRaises(ValueError, DatasetBootstrapper, opts=opts(), hash="abc")
 
@@ -250,6 +270,8 @@ class DatasetBootstrapperTest(unittest.TestCase):
         class opts:
             root = "src/tests/data/"
             dataset = "mccallatest"
+            groundtruth = "chipunion"
+            undirected = False
 
         bootstrapper = DatasetBootstrapper(opts, hash="abs")
 
@@ -260,6 +282,12 @@ class DatasetBootstrapperTest(unittest.TestCase):
         class opts:
             root = "src/tests/data/"
             dataset = "mccallatest"
+            groundtruth = "chipunion"
+            val_seed = 2
+            canonical_test_seed = 1
+            val_fraction = 0.2
+            test_fraction = 0.2
+            undirected = False
 
         dataset = DatasetBootstrapper(opts, hash="abs").get_dataset()
 
