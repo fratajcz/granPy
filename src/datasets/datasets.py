@@ -20,6 +20,8 @@ class GranPyDataset(InMemoryDataset):
         self.test_fraction = opts.test_fraction
         self.val_fraction = opts.val_fraction
         self.undirected = opts.undirected
+        self.split_by_node = opts.split_by_node
+        self.sampling_power = opts.sampling_power
         super().__init__(root)
 
         self.train_data, self.val_data, self.test_data = torch.load(self.processed_paths[0])
@@ -57,7 +59,7 @@ class GranPyDataset(InMemoryDataset):
                     edge_index=edgelist,
                     num_nodes=features.shape[0])
 
-        train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed, self.undirected)
+        train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed, self.undirected, self.split_by_node)
 
         train_data.pot_net = self.construct_pot_net(train_data)
         val_data.pot_net = self.construct_pot_net(val_data)
@@ -65,8 +67,123 @@ class GranPyDataset(InMemoryDataset):
 
         torch.save([train_data, val_data, test_data], self.processed_paths[0])
 
+    def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None, undirected=False, by_node=False):
+        if by_node:
+            return self.split_data_by_node(data, test_fraction=0.2, val_fraction=0.2, test_seed=test_seed, val_seed=val_seed, undirected=undirected, power=self.sampling_power)
+        else:
+            return self.split_data_independent(data, test_fraction=0.2, val_fraction=0.2, test_seed=test_seed, val_seed=val_seed, undirected=undirected)
+
     @classmethod
-    def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None, undirected=False):
+    def split_data_by_node(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None, undirected=False, power=-0.75):
+
+        data = data.clone()
+        
+        if val_seed is None:
+            val_seed = random.randint(0, 100)
+
+        if test_seed is None:
+            test_seed = random.randint(0, 100)
+
+        # TODO check if this logic checks out with our assumptions
+        if undirected:
+            probabilities = torch.bincount(data.edge_index.flatten()).float()
+        else:
+            probabilities = torch.bincount(data.edge_index[0, :]).float()        
+
+        
+        probabilities /= probabilities.sum()
+        probabilities = probabilities.pow(power)
+        probabilities[probabilities.isinf()] = 0  # power operation can introduce inf values
+        probabilities /= probabilities.sum()
+
+        assert np.allclose(probabilities.sum(), 1)
+
+        tolerance = 0.05
+
+        trainval_edges, test_edges, sampled_nodes = self.sample_nodes(data.edge_index, probabilities, test_fraction, tolerance, seed=test_seed, sampled_nodes=[], undirected=undirected)
+
+        train_edges, val_edges, _ = self.sample_nodes(data.edge_index, probabilities, val_fraction, tolerance, seed=val_seed, sampled_nodes=sampled_nodes, undirected=undirected)
+
+        train_data = data.clone()
+        train_data.edge_index = train_edges
+        train_data.pos_edges = train_data.edge_index
+        train_data.known_edges = train_data.edge_index
+        train_data.known_edges_label = torch.ones(train_data.known_edges.shape[1])
+        
+        val_data = data.clone()
+        val_data.edge_index = train_edges
+        val_data.pos_edges = val_edges
+        val_data.known_edges = torch.hstack((train_data.known_edges, val_data.pos_edges))
+        val_data.known_edges_label = torch.hstack((1-train_data.known_edges_label, torch.ones(val_data.pos_edges.shape[1])))
+        
+        test_data = data.clone()
+        test_data.edge_index = torch.hstack((train_edges, val_edges))
+        test_data.pos_edges = test_edges
+        test_data.known_edges = torch.hstack((val_data.known_edges, test_data.pos_edges))
+        test_data.known_edges_label = torch.hstack((1-val_data.known_edges_label, torch.ones(test_data.pos_edges.shape[1])))
+
+        return train_data, val_data, test_data
+
+    def sample_nodes(edge_index, probabilities, sample_fraction, tolerance=0.05, seed=None, sampled_nodes=[], undirected=False):
+
+        eligible_nodes = np.arange(probabilities.shape[0])
+        nonzero_nodes = probabilities.nonzero().shape[0]
+        max_num_test_edges = sample_fraction * edge_index.shape[1]
+        upper_tolerance_threshold = (1 + tolerance) * max_num_test_edges
+        lower_tolerance_threshold = (1 - tolerance) * max_num_test_edges
+        initial_sampled_nodes = sampled_nodes[:]
+
+        if seed is not None:
+            np.random.seed(seed)
+
+        test_subgraph = []
+        num_sampled_test_edges = 0
+        chunksize = max(min(100, int(nonzero_nodes / 10)), 1)
+        patience = 3
+
+        while not lower_tolerance_threshold < num_sampled_test_edges < upper_tolerance_threshold:
+            if patience == 0: break
+            chunk = np.random.choice(eligible_nodes, size=chunksize, replace=False, p=probabilities.numpy())
+            try:
+                chunk = [node for node in chunk.tolist() if node not in sampled_nodes]
+            except TypeError:
+                if chunk in sampled_nodes:
+                    sampled_nodes.append(chunk)
+                else:
+                    chunk = [chunk]
+            
+            if len(chunk) == 0:
+                continue
+            test_subgraph.append(pyg_utils.k_hop_subgraph(chunk, 1, edge_index, relabel_nodes=False, flow="target_to_source", directed=not undirected)[1])
+
+            num_sampled_test_edges = 0
+            exceeded_flag = False
+            for subgraph in test_subgraph: 
+                num_sampled_test_edges += subgraph.shape[1]
+                if num_sampled_test_edges > upper_tolerance_threshold:
+                    test_subgraph = test_subgraph[:-1]
+                    exceeded_flag = True
+                    chunksize /= 10
+
+            if not exceeded_flag:
+                sampled_nodes.extend(chunk)  # if the sampled chunk did not exceed the number of edges, then add it to the sampled nodes
+            
+            if chunksize < 1:
+                chunksize = 1
+                patience -= 1 # if it fails to get a good sample even though we are already down to one sampled node
+
+        newly_sampled_nodes = [node for node in sampled_nodes if node not in initial_sampled_nodes]
+
+        _, test_edges, _, _ = pyg_utils.k_hop_subgraph(newly_sampled_nodes, 1, edge_index, relabel_nodes=False, flow="target_to_source", directed=not undirected)
+
+        _, _, _, edge_mask = pyg_utils.k_hop_subgraph(sampled_nodes, 1, edge_index, relabel_nodes=False, flow="target_to_source", directed=not undirected)
+
+        trainval_edges = edge_index[:, ~edge_mask]
+
+        return trainval_edges, test_edges, sampled_nodes
+
+    @classmethod
+    def split_data_independent(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None, undirected=False):
 
         data = data.clone()
         
@@ -77,6 +194,7 @@ class GranPyDataset(InMemoryDataset):
             test_seed = random.randint(0, 100)
 
         seed_everything(test_seed)
+
 
         traintest_split = RandomLinkSplit(num_val=0, num_test=test_fraction, is_undirected=undirected, add_negative_train_samples=False)
 
@@ -105,6 +223,7 @@ class GranPyDataset(InMemoryDataset):
         test_data.known_edges_label = torch.hstack((1-val_data.known_edges_label, torch.ones(test_data.pos_edges.shape[1])))
 
         return train_data, val_data, test_data
+    
 
     @classmethod
     def construct_pot_net(self, data) -> torch.LongTensor:

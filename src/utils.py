@@ -13,6 +13,8 @@ class opts():
     test_fraction: float = dataclasses.field(default=0.2)
     undirected: bool = dataclasses.field(default=False)
     groundtruth: str = dataclasses.field(default="chipunion")
+    split_by_node: bool = dataclasses.field(default=False)
+    sampling_power: float = dataclasses.field(default=-0.75)
     
     # Model parameters
     n_conv_layers: int = dataclasses.field(default=None)
@@ -64,7 +66,9 @@ def dataset_hash_keys():
         "test_fraction",
         "dataset",
         "undirected",
-        "groundtruth"
+        "groundtruth",
+        "split_by_node",
+        "sampling_power"
         ]
     
     return keys
