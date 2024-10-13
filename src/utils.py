@@ -43,12 +43,12 @@ class opts():
     score_batched: bool = dataclasses.field(default=False)
     binarize_prediction: bool = dataclasses.field(default=False)
     eval_every: int = dataclasses.field(default=1)
-    unmask_topk: bool = dataclasses.field(default=True)
     
     # Diffusion parameters
     diffusion: bool = dataclasses.field(default=False)
     diffusion_steps: int = dataclasses.field(default=100)
     fixed_t: float = dataclasses.field(default=None)
+    unmask_topk: bool = dataclasses.field(default=True)
     
     # General settings
     cuda: str = dataclasses.field(default="auto")

@@ -143,15 +143,18 @@ class Experiment:
     
     def get_loss(self, data, target="train"):
         neg_edges = self.get_negative_edges(data)
-                
-        if self.diffusion and target != "train":
-            pos_out, neg_out = self.model.eval_edges(data.x, target=data.edge_index, pos_eval=data.pos_edges, neg_eval=neg_edges, unmask_topk=self.unmask_topk)
+        
+        if self.diffusion:
+            if target == "train":
+                pos_out, neg_out = self.model.train_scores(data.x, data.edge_index, neg_edges)
+            else:
+                pos_out, neg_out = self.model.eval_scores(data.x, target=data.edge_index, pos_eval=data.pos_edges, neg_eval=neg_edges, unmask_topk=self.unmask_topk)
         else:
             z = self.model.encode(data.x, data.edge_index)
             pos_out = self.model.decode(z, data.pos_edges, pos_edge_index=data.edge_index)
             neg_out = self.model.decode(z, neg_edges, pos_edge_index=data.edge_index)
             
-        if target != "train" and self.binarize:
+        if self.binarize and target != "train":
             pos_out = torch.bernoulli(pos_out)
             neg_out = torch.bernoulli(neg_out)
 

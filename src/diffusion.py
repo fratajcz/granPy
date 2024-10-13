@@ -1,13 +1,14 @@
 import torch
 from tqdm import tqdm
 from src.utils import print_memory
+from src.negative_sampling import get_negative_edges
 
 class DiffusionWrapper(torch.nn.Module):
     def __init__(self, model, opts, device):
         super().__init__()
         self.model = model
         self.opts = opts
-        self.eps = torch.tensor(1e-16, dtype=torch.float32)
+        self.eps = torch.tensor(1e-3, dtype=torch.float32)
         self.num_steps = opts.diffusion_steps
         self.noise = LogLinearNoise(self.eps)
         self.mode = 'train'
@@ -21,26 +22,24 @@ class DiffusionWrapper(torch.nn.Module):
         else:
             self.t = None
         
-    def encode(self, x, e): 
+    def train_scores(self, x, e, neg_edges): ##check number of neg edges
         self.num_nodes = x.shape[0]
             
         # forward diffusion process
         e0 = e
         t = self.sample_time() if self.t is None else self.t
-        et, self.mask = self.mask_edges(e0, t)
+        et, mask = self.mask_edges(e0, t)
+        ## TODO: track time in wandb
         
-        # encode masked graph
-        zt = self.model.encode(x, et)
-        return zt
-    
-    def decode(self, zt, eval_edges, *args, **kwargs):
-
         # denoising prediction
-        e0_theta = self.model.decode(zt, eval_edges, sigmoid=True)
-        return e0_theta[self.mask]
+        zt = self.model.encode(x, et)
+        pos_out = self.model.decode(zt, e[mask], sigmoid=True)
+        neg_out = self.model.decode(zt, neg_edges[mask], sigmoid=True)
+        
+        return pos_out, neg_out
     
     @torch.no_grad
-    def eval_edges(self, x, target, pos_eval, neg_eval, unmask_topk=False, binarize=True):
+    def eval_scores(self, x, target, pos_eval, neg_eval, unmask_topk=False, binarize=True):
         topk = pos_eval.shape[1] if unmask_topk else None
         e0_theta = self.sample(x, self.num_steps, target, num_edges=topk)
         
@@ -112,8 +111,10 @@ class DiffusionWrapper(torch.nn.Module):
         #sigma_t, _ = self.noise(t)
         #n_unmask = int(move_chance_t - move_chance_s)
         
+        ## Optimization: low rank bernoulli?
+        
         if top_edges is None:
-            adj0_sample = torch.bernoulli(adj0_theta).fill_diagonal_(0)
+            adj0_sample = torch.bernoulli(adj0_theta).fill_diagonal_(0) 
         else:
             adj0_sample = torch.zeros_like(adj0_theta)
             _, top_indices = adj0_theta.fill_diagonal_(0).flatten().topk(top_edges)
@@ -124,13 +125,13 @@ class DiffusionWrapper(torch.nn.Module):
         return es_unmasked, mask_s
         
     def diff_loss(self, e0_theta, e0):
-        # double check continous formulation: no need to binarize time
+        ## TODO: add batch
         log_p_theta = torch.nn.functional.binary_cross_entropy(e0_theta, e0, reduction='none')
         loss = log_p_theta * (self.dsigma / torch.expm1(self.sigma))
 
-        return loss.sum()
+        return loss.mean() #check mean bc time
 
-class LogLinearNoise(torch.nn.Module):
+class LogLinearNoise(torch.nn.Module): #simplify to t?
     def __init__(self, eps):
         super().__init__()
         self.eps = eps
