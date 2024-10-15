@@ -46,7 +46,6 @@ class Experiment:
         self.patience = opts.es_patience
 
         self.test_performance = None
-        wandb.init()
 
     def run(self, eval_only=False):
         
