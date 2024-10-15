@@ -32,8 +32,8 @@ class DiffusionWrapper(torch.nn.Module):
         
         # denoising prediction
         zt = self.model.encode(x, et)
-        pos_out = self.model.decode(zt, e[mask], sigmoid=True)
-        neg_out = self.model.decode(zt, neg_edges[mask], sigmoid=True)
+        pos_out = self.model.decode(zt, e[:, mask], sigmoid=True)
+        neg_out = self.model.decode(zt, neg_edges[:, mask], sigmoid=True)
         
         return pos_out, neg_out
     
