@@ -1,6 +1,7 @@
 import torch
 from tqdm import tqdm
 from src.utils import print_memory
+import wandb
 
 class DiffusionWrapper(torch.nn.Module):
     def __init__(self, model, opts, device):
