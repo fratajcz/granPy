@@ -21,8 +21,8 @@ class opts():
     activation_layer: str = dataclasses.field(default="ReLU")
     dropout_ratio: float = dataclasses.field(default=None)
     mplayer: str = dataclasses.field(default="GCNConv")
-    mplayer_args: List[str] = dataclasses.field(default=None)
-    mplayer_kwargs: Dict = dataclasses.field(default=None)
+    mplayer_args: List[str] = dataclasses.field(default_factory=list)
+    mplayer_kwargs: Dict = dataclasses.field(default_factory=dict)
     latent_dim: int = dataclasses.field(default=None)
     layer_ratio: int = dataclasses.field(default=None)
     decoder: str = dataclasses.field(default=None)
@@ -35,7 +35,7 @@ class opts():
     es_patience: int = dataclasses.field(default=10)
     val_mode: str = dataclasses.field(default=None)
     val_metric: str = dataclasses.field(default="average_precision_score")
-    test_metrics: List[str] = dataclasses.field(default=None)
+    test_metrics: List[str] = dataclasses.field(default_factory=lambda: ["average_precision_score", "roc_auc_score"])
     n_folds: int = dataclasses.field(default=5)
     epochs: int = dataclasses.field(default=500)
     negative_sampling: str = dataclasses.field(default=None)
@@ -48,14 +48,6 @@ class opts():
     wandb_save_model: bool = dataclasses.field(default=True)
     wandb_group: str = dataclasses.field(default=None)
     cache_model: bool = dataclasses.field(default=False)    
-    
-    def __init__(self, new):
-        setattr(self, "test_metrics", ["average_precision_score", "roc_auc_score"])
-        setattr(self, "mplayer_args", [])
-        setattr(self, "mplayer_kwargs", {})
-        for key, value in new.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
                 
 
 def dataset_hash_keys():

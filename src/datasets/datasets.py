@@ -69,9 +69,9 @@ class GranPyDataset(InMemoryDataset):
 
     def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None, undirected=False, by_node=False):
         if by_node:
-            return self.split_data_by_node(data, test_fraction=0.2, val_fraction=0.2, test_seed=test_seed, val_seed=val_seed, undirected=undirected, power=self.sampling_power)
+            return self.split_data_by_node(data, test_fraction=test_fraction, val_fraction=val_fraction, test_seed=test_seed, val_seed=val_seed, undirected=undirected, power=self.sampling_power)
         else:
-            return self.split_data_independent(data, test_fraction=0.2, val_fraction=0.2, test_seed=test_seed, val_seed=val_seed, undirected=undirected)
+            return self.split_data_independent(data, test_fraction=test_fraction, val_fraction=val_fraction, test_seed=test_seed, val_seed=val_seed, undirected=undirected)
 
     @classmethod
     def split_data_by_node(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None, undirected=False, power=-0.75):
@@ -163,7 +163,7 @@ class GranPyDataset(InMemoryDataset):
                 if num_sampled_test_edges > upper_tolerance_threshold:
                     test_subgraph = test_subgraph[:-1]
                     exceeded_flag = True
-                    chunksize /= 10
+                    chunksize = int(chunksize/ 10)
 
             if not exceeded_flag:
                 sampled_nodes.extend(chunk)  # if the sampled chunk did not exceed the number of edges, then add it to the sampled nodes

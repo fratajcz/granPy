@@ -1,7 +1,7 @@
 from src.utils import opts
 from training import TrainingPipeline
 
-parameters = dict(
+_opts = opts(
     # Data parameters
     dataset= "shalek",
     val_seed= 12,
@@ -40,7 +40,7 @@ parameters = dict(
     cache_model = True
 )
 
-pipeline = TrainingPipeline(opts(parameters))
+pipeline = TrainingPipeline(_opts)
 
 result = pipeline.run()
 print(result)
