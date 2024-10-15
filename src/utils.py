@@ -59,11 +59,7 @@ class opts():
     wandb_save_model: bool = dataclasses.field(default=True)
     wandb_group: str = dataclasses.field(default=None)
     cache_model: bool = dataclasses.field(default=False)    
-<<<<<<< HEAD
-    verbose: bool = dataclasses.field(default=True)
-=======
->>>>>>> origin/master
-                
+    verbose: bool = dataclasses.field(default=True)     
 
 def dataset_hash_keys():
     keys = [
