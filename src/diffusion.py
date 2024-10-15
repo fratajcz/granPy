@@ -1,7 +1,6 @@
 import torch
 from tqdm import tqdm
 from src.utils import print_memory
-from src.negative_sampling import get_negative_edges
 
 class DiffusionWrapper(torch.nn.Module):
     def __init__(self, model, opts, device):
