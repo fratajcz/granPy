@@ -220,7 +220,7 @@ class GranPyDatasetTest(unittest.TestCase):
 
         data = Data(edge_index=edge_index, num_nodes=10)
 
-        train_data, val_data, test_data = GranPyDataset.split_data(data, val_seed=1, test_seed=2, test_fraction=0.2, val_fraction=0.2)
+        train_data, val_data, test_data = GranPyDataset.split_data_independent(data, val_seed=1, test_seed=2, test_fraction=0.2, val_fraction=0.2)
 
         self.assertEqual(train_data.edge_index.shape[1], 6)  # contains only train edges
         self.assertEqual(val_data.edge_index.shape[1], 6)  # contains only train edges
@@ -243,9 +243,46 @@ class GranPyDatasetTest(unittest.TestCase):
 
         data = Data(edge_index=edge_index, num_nodes=10)
 
-        train_data_1, val_data_1, test_data_1 = GranPyDataset.split_data(data, val_seed=1, test_seed=3, test_fraction=0.2, val_fraction=0.2)
-        train_data_2, val_data_2, test_data_2 = GranPyDataset.split_data(data, val_seed=2, test_seed=3, test_fraction=0.2, val_fraction=0.2)
+        train_data_1, val_data_1, test_data_1 = GranPyDataset.split_data_independent(data, val_seed=1, test_seed=3, test_fraction=0.2, val_fraction=0.2)
+        train_data_2, val_data_2, test_data_2 = GranPyDataset.split_data_independent(data, val_seed=4, test_seed=3, test_fraction=0.2, val_fraction=0.2)
 
+        self.assertTrue(torch.equal(test_data_1.pos_edges, test_data_2.pos_edges))
+        self.assertFalse(torch.equal(val_data_1.pos_edges, val_data_2.pos_edges))
+
+    def test_split_data_nodewise(self):
+        edge_index = torch.tensor([[0, 1, 1, 2, 2, 3, 3, 4, 4, 5],
+                                   [1, 0, 2, 1, 3, 2, 4, 3, 5, 4]])
+
+        data = Data(edge_index=edge_index, num_nodes=10)
+
+        train_data, val_data, test_data = GranPyDataset.split_data_by_node(data, val_seed=1, test_seed=3, test_fraction=0.2, val_fraction=0.2)
+
+        self.assertEqual(train_data.edge_index.shape[1], 6)  # contains only train edges
+        self.assertEqual(val_data.edge_index.shape[1], 6)  # contains only train edges
+        self.assertEqual(test_data.edge_index.shape[1], 8)  # contains train and val edges
+        
+        self.assertEqual(train_data.known_edges.shape[1], 6)  # contains only train edges
+        self.assertEqual(val_data.known_edges.shape[1], 8)  # contains train and val edges
+        self.assertEqual(test_data.known_edges.shape[1], 10)  # contains all edges
+        
+        self.assertEqual(train_data.pos_edges.shape[1], 6)  # contains only train edges
+        self.assertEqual(val_data.pos_edges.shape[1], 2)  # contains only val edges
+        self.assertEqual(test_data.pos_edges.shape[1], 2)  # contains only test edges
+        
+        for data in [train_data, val_data, test_data]:
+            self.assertTrue(getattr(data, "num_nodes"), 10)
+
+    def test_split_data_nodewise_same_test_different_val(self):
+        edge_index = torch.tensor([[0, 1, 1, 2, 2, 3, 3, 4, 4, 5],
+                                   [1, 0, 2, 1, 3, 2, 4, 3, 5, 4]])
+
+        data = Data(edge_index=edge_index, num_nodes=10)
+
+        train_data_1, val_data_1, test_data_1 = GranPyDataset.split_data_by_node(data, val_seed=1, test_seed=3, test_fraction=0.2, val_fraction=0.2)
+        train_data_2, val_data_2, test_data_2 = GranPyDataset.split_data_by_node(data, val_seed=5, test_seed=3, test_fraction=0.2, val_fraction=0.2)
+
+        pos1 = val_data_1.pos_edges
+        pos2 = val_data_2.pos_edges
         self.assertTrue(torch.equal(test_data_1.pos_edges, test_data_2.pos_edges))
         self.assertFalse(torch.equal(val_data_1.pos_edges, val_data_2.pos_edges))
 

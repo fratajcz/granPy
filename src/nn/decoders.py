@@ -52,7 +52,7 @@ class MLPDecoder(torch.nn.Module):
         return torch.sigmoid(value) if sigmoid else value
 
 
-class DegreeSorter(torch.nn.Module):
+class InDegreeTargetSorter(torch.nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
 
@@ -62,7 +62,7 @@ class DegreeSorter(torch.nn.Module):
         return degrees[tail_nodes]
 
 
-class OutDegreeSorter(torch.nn.Module):
+class OutDegreeSourceSorter(torch.nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
 
