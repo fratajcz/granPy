@@ -43,8 +43,15 @@ class DiffusionWrapper(torch.nn.Module):
         e0_theta = self.sample(x, self.num_steps, target, num_edges=topk)
         
         if binarize:
-            pos_out = e0_theta[pos_eval[0], pos_eval[1]].float()
-            neg_out = e0_theta[neg_eval[0], neg_eval[1]].float()
+            e0_theta_reshaped = e0_theta.t().unsqueeze(1)
+            
+            pos_eval_reshaped = pos_eval.t().unsqueeze(0)
+            pos_matches = (e0_theta_reshaped == pos_eval_reshaped).all(dim=2)
+            pos_out = pos_matches.any(dim=0).float()
+
+            neg_eval_reshaped = neg_eval.t().unsqueeze(0)
+            neg_matches = (e0_theta_reshaped == neg_eval_reshaped).all(dim=2)
+            neg_out = neg_matches.any(dim=0).float()
         else:
             z = self.model.encode(x, e0_theta)
             pos_out = self.model.decode(z, pos_eval, sigmoid=True)
