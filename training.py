@@ -58,7 +58,7 @@ def parse_args():
     
 if __name__ == "__main__":
     
-    _opts = opts(parse_args())
+    _opts = opts(**parse_args())
     if(_opts.wandb_tracking):
         run = wandb.init(project=_opts.wandb_project, entity="scialdonelab", save_code=True, group=_opts.wandb_group, 
                    config=wandb.helper.parse_config(dataclasses.asdict(_opts), exclude=('root', 'model_path', 'wandb_tracking', 'wandb_project', 'wandb_save_model', 'wandb_group')))
