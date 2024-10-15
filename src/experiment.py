@@ -81,7 +81,7 @@ class Experiment:
 
         self.eval_step(target="test")
 
-        if self.opts.wandb_tracking and wandb.run is not None:
+        if self.opts.wandb_tracking and (wandb.run is not None):
             wandb.log(self.test_performance)
             wandb.run.summary[f"val_{self.opts.val_metric}"] = self.best_val_performance
             if self.opts.wandb_save_model:
@@ -167,8 +167,7 @@ class Experiment:
         state_dict = {
             'model_state_dict': self.model.state_dict(),
         }
-        if not os.path.exists(os.path.dirname(self.opts.model_path)):
-            os.makedirs(os.path.dirname(self.opts.model_path))
+        os.makedirs(os.path.dirname(self.opts.model_path), exist_ok=True)
         torch.save(state_dict, os.path.join(self.opts.model_path, self.model_hash + ".pt"))
        
     def delete_model(self):
@@ -191,7 +190,7 @@ class Experiment:
         else:
             wandb.run.log_model(path=os.path.join(self.opts.model_path, self.model_hash + ".pt"))
 
-    def load_model(self, path=None):
+    def load_model(self):
         '''loads a state dict either from the current run or from a given path'''
         path = os.path.join(self.opts.model_path, self.model_hash + ".pt")
         if torch.cuda.is_available():
@@ -255,7 +254,7 @@ class Experiment:
                 continue
 
             scores = torch.cat((pos, neg)).detach().cpu().numpy()
-            labels = torch.cat((torch.ones_like(pos), torch.zeros_like(neg))).cpu().numpy()
+            labels = torch.cat((torch.ones_like(pos), torch.zeros_like(neg))).detach().cpu().numpy()
 
             for metric in metrics:
                 function = getattr(skmetrics, metric)

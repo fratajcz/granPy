@@ -23,13 +23,12 @@ class DiffusionWrapper(torch.nn.Module):
             self.t = None
         
     def train_scores(self, x, e, neg_edges): ##check number of neg edges
-        self.num_nodes = x.shape[0]
             
         # forward diffusion process
         e0 = e
         t = self.sample_time() if self.t is None else self.t
         et, mask = self.mask_edges(e0, t)
-        ## TODO: track time in wandb
+        if self.opts.wandb_tracking: wandb.log({"t_sampled": t}, commit=False)
         
         # denoising prediction
         zt = self.model.encode(x, et)
@@ -44,14 +43,8 @@ class DiffusionWrapper(torch.nn.Module):
         e0_theta = self.sample(x, self.num_steps, target, num_edges=topk)
         
         if binarize:
-            pos_out = torch.zeros(pos_eval.shape[1], dtype=torch.float32).to(self.device)
-            for i in range(pos_eval.shape[1]):
-                if ((e0_theta == pos_eval[:, i].unsqueeze(1)).all(dim=0)).any():
-                    pos_out[i] = 1
-            neg_out = torch.zeros(neg_eval.shape[1], dtype=torch.float32).to(self.device)
-            for i in range(neg_eval.shape[1]):
-                if ((e0_theta == neg_eval[:, i].unsqueeze(1)).all(dim=0)).any():
-                    neg_out[i] = 1
+            pos_out = e0_theta[pos_eval[0], pos_eval[1]].float()
+            neg_out = e0_theta[neg_eval[0], neg_eval[1]].float()
         else:
             z = self.model.encode(x, e0_theta)
             pos_out = self.model.decode(z, pos_eval, sigmoid=True)
@@ -83,7 +76,7 @@ class DiffusionWrapper(torch.nn.Module):
             es = torch.hstack((et, es_unmasked))
             
             et = es
-            mask_t = mask_s
+            mask_t.copy_(mask_s)
             
         return es
         
@@ -126,11 +119,11 @@ class DiffusionWrapper(torch.nn.Module):
         
     def diff_loss(self, e0_theta, e0):
         ## TODO: add batch
-        log_p_theta = torch.nn.functional.binary_cross_entropy(e0_theta, e0, reduction='none')
+        log_p_theta = torch.nn.functional.binary_cross_entropy(e0_theta, e0, reduction='mean')
         loss = log_p_theta * (self.dsigma / torch.expm1(self.sigma))
 
-        return loss.mean() #check mean bc time
-
+        return loss
+    
 class LogLinearNoise(torch.nn.Module): #simplify to t?
     def __init__(self, eps):
         super().__init__()
