@@ -10,7 +10,7 @@ import torch
 class DiffusionTest(unittest.TestCase):
     def __init__(self, method_name):
         super().__init__(method_name)
-        parameters = dict(
+        self._opts = opts(
             # Data parameters
             dataset= "jackson",
             
@@ -41,7 +41,6 @@ class DiffusionTest(unittest.TestCase):
             wandb_tracking = False,
             wandb_save_model = False,
         )
-        self._opts = opts(parameters)
         self.device = "cpu"
         dataset_hash = get_dataset_hash(self._opts)
         self.dataset = DatasetBootstrapper(self._opts, hash=dataset_hash).get_dataset()
