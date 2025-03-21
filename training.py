@@ -48,11 +48,11 @@ def parse_args():
     parser.add_argument('--cuda', type=str)
     parser.add_argument('--groundtruth', type=str)
     parser.add_argument('--diffusion', type=str, default="False")
-    parser.add_argument('--diffusion_steps', type=int)
-    parser.add_argument('--eval_every', type=int)
-    parser.add_argument('--binarize_prediction', type=str)
-    parser.add_argument('--unmask_topk', type=str)
-    parser.add_argument('--fixed_t', type=str)
+    parser.add_argument('--diffusion_steps', type=int, default=100)
+    parser.add_argument('--eval_every', type=int, default=1)
+    parser.add_argument('--binarize_prediction', type=str, default="False")
+    parser.add_argument('--unmask_topk', type=str, default="True")
+    parser.add_argument('--fixed_t', type=str, default = "None")
     
     args = parser.parse_args()
     args_dict = {k: v for k, v in vars(args).items() if v is not None}
