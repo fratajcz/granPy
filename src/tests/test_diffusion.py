@@ -44,7 +44,7 @@ class DiffusionTest(unittest.TestCase):
         self.device = "cpu"
         dataset_hash = get_dataset_hash(self._opts)
         self.dataset = DatasetBootstrapper(self._opts, hash=dataset_hash).get_dataset()
-        self.model = getattr(models, self._opts.model)(input_dim=self.dataset.train_data.x.shape[1], opts=self._opts).to(self.device)
+        self.model = getattr(models, self._opts.model)(input_dim=self.dataset.train_data.x.shape[1], opts=self._opts, num_nodes=self.dataset.train_data.x.shape[0]).to(self.device)
 
     def test_init(self):
                 

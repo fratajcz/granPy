@@ -95,6 +95,17 @@ class HarmonicDegreeSorter(torch.nn.Module):
         out_degrees = degree(pos_edge_index[0, :], num_nodes=z.shape[0]) + eps
         return 2 / (in_degrees[tail_nodes].pow(-1) + out_degrees[head_nodes].pow(-1))
     
+class InvertedHarmonicDegreeSorter(torch.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+    def forward(self, z, edge_index, pos_edge_index, eps=1e-16):
+        tail_nodes = edge_index[1, :]
+        head_nodes = edge_index[0, :]
+        in_degrees = degree(pos_edge_index[1, :], num_nodes=z.shape[0]) + eps
+        out_degrees = degree(pos_edge_index[0, :], num_nodes=z.shape[0]) + eps
+        return - 2 / (in_degrees[tail_nodes].pow(-1) + out_degrees[head_nodes].pow(-1))
+    
 class CorrelationDecoder(torch.nn.Module):
     def __init__(self, opts):
         super(CorrelationDecoder, self).__init__()

@@ -15,7 +15,7 @@ class opts():
     test_fraction: float = dataclasses.field(default=0.2)
     undirected: bool = dataclasses.field(default=False)
     groundtruth: str = dataclasses.field(default="chipunion")
-    split_by_node: bool = dataclasses.field(default=False)
+    eval_split: str = dataclasses.field(default="edges")
     sampling_power: float = dataclasses.field(default=-0.75)
     
     # Model parameters
@@ -70,7 +70,7 @@ def dataset_hash_keys():
         "dataset",
         "undirected",
         "groundtruth",
-        "split_by_node",
+        "eval_split",
         "sampling_power"
         ]
     

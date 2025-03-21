@@ -20,7 +20,7 @@ class GranPyDataset(InMemoryDataset):
         self.test_fraction = opts.test_fraction
         self.val_fraction = opts.val_fraction
         self.undirected = opts.undirected
-        self.split_by_node = opts.split_by_node
+        self.eval_split = opts.eval_split
         self.sampling_power = opts.sampling_power
         super().__init__(root)
 
@@ -59,7 +59,7 @@ class GranPyDataset(InMemoryDataset):
                     edge_index=edgelist,
                     num_nodes=features.shape[0])
 
-        train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed, self.undirected, self.split_by_node)
+        train_data, val_data, test_data = self.split_data(data, self.test_fraction, self.val_fraction, self.canonical_test_seed, self.val_seed, self.undirected, self.eval_split)
 
         train_data.pot_net = self.construct_pot_net(train_data)
         val_data.pot_net = self.construct_pot_net(val_data)
@@ -67,11 +67,15 @@ class GranPyDataset(InMemoryDataset):
 
         torch.save([train_data, val_data, test_data], self.processed_paths[0])
 
-    def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None, undirected=False, by_node=False):
-        if by_node:
+    def split_data(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None, undirected=False, eval_split="edges"):
+        if eval_split == "nodes":
             return self.split_data_by_node(data, test_fraction=test_fraction, val_fraction=val_fraction, test_seed=test_seed, val_seed=val_seed, undirected=undirected, power=self.sampling_power)
-        else:
+        elif eval_split == "edges":
             return self.split_data_independent(data, test_fraction=test_fraction, val_fraction=val_fraction, test_seed=test_seed, val_seed=val_seed, undirected=undirected)
+        elif eval_split == "genelink":
+            return self.split_data_genelink(data, test_fraction=test_fraction, val_fraction=val_fraction, test_seed=test_seed, val_seed=val_seed, undirected=undirected)
+        else:
+            raise ValueError(f"Unknown eval split type: {eval_split}")
 
     @classmethod
     def split_data_by_node(self, data, test_fraction=0.2, val_fraction=0.2, test_seed=None, val_seed=None, undirected=False, power=-0.75):
@@ -219,6 +223,72 @@ class GranPyDataset(InMemoryDataset):
         val_data.known_edges_label = torch.hstack((1-train_data.known_edges_label, torch.ones(val_data.pos_edges.shape[1])))
         
         test_data.pos_edges = test_data.edge_label_index[:, test_data.edge_label == 1]
+        test_data.known_edges = torch.hstack((val_data.known_edges, test_data.pos_edges))
+        test_data.known_edges_label = torch.hstack((1-val_data.known_edges_label, torch.ones(test_data.pos_edges.shape[1])))
+
+        return train_data, val_data, test_data
+    
+    @classmethod
+    def split_data_genelink(self, data, test_fraction=0.33, val_fraction=0.33, test_seed=None, val_seed=None, undirected=False):
+
+        data = data.clone()
+        
+        if val_seed is None:
+            val_seed = random.randint(0, 100)
+
+        if test_seed is None:
+            test_seed = random.randint(0, 100)
+
+        seed_everything(test_seed)
+
+        all_pos_edges = pyg_utils.coalesce(data.edge_index)
+        tfs = all_pos_edges[0, :].unique()
+
+        train_edges = []
+        val_edges = []
+        test_edges = []
+
+        for tf in tfs:
+            targets = all_pos_edges[1, all_pos_edges[0, :] == tf]
+            num_targets = len(targets)
+            if num_targets == 1:
+                if random.random() < test_fraction:
+                    test_edges.append((tf, targets[0]))
+                else:
+                    train_edges.append((tf, targets[0]))
+            elif num_targets == 2:
+                train_edges.append((tf, targets[0]))
+                test_edges.append((tf, targets[1]))
+            else:
+                targets = targets[torch.randperm(num_targets)]
+                num_val = int(num_targets * val_fraction)
+                num_test = int(num_targets * test_fraction)
+                num_train = num_targets - num_val - num_test
+                train_edges.extend([(tf, target) for target in targets[:num_train]])
+                val_edges.extend([(tf, target) for target in targets[num_train:num_train + num_val]])
+                test_edges.extend([(tf, target) for target in targets[num_train + num_val:]])
+
+        train_edges = torch.tensor(train_edges).t().contiguous()
+        val_edges = torch.tensor(val_edges).t().contiguous()
+        test_edges = torch.tensor(test_edges).t().contiguous()
+
+        train_data = data.clone()
+        val_data = data.clone()
+        test_data = data.clone()
+
+        train_data.edge_index = train_edges
+        val_data.edge_index = train_edges
+        test_data.edge_index = torch.hstack((train_edges, val_edges))
+
+        train_data.pos_edges = train_edges
+        train_data.known_edges = train_data.edge_index
+        train_data.known_edges_label = torch.ones(train_data.known_edges.shape[1])
+        
+        val_data.pos_edges = val_edges
+        val_data.known_edges = torch.hstack((train_data.known_edges, val_data.pos_edges))
+        val_data.known_edges_label = torch.hstack((1-train_data.known_edges_label, torch.ones(val_data.pos_edges.shape[1])))
+        
+        test_data.pos_edges = test_edges
         test_data.known_edges = torch.hstack((val_data.known_edges, test_data.pos_edges))
         test_data.known_edges_label = torch.hstack((1-val_data.known_edges_label, torch.ones(test_data.pos_edges.shape[1])))
 

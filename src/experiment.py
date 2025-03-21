@@ -27,7 +27,7 @@ class Experiment:
         self.dataset = DatasetBootstrapper(opts, hash=self.dataset_hash).get_dataset()
         self.dataset.to(self.device)
 
-        self.model = getattr(models, opts.model)(input_dim=self.dataset.train_data.x.shape[1], opts=opts).to(self.device)
+        self.model = getattr(models, opts.model)(input_dim=self.dataset.train_data.x.shape[1], opts=opts, num_nodes=self.dataset.train_data.x.shape[0]).to(self.device)
         
         self.diffusion = opts.diffusion
         if self.diffusion:
