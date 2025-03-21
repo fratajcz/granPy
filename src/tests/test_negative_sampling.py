@@ -4,7 +4,6 @@ from torch_geometric.utils import coalesce
 from src.negative_sampling import neg_sampling
 from src.datasets.datasets import GranPyDataset
 import torch
-from torch_geometric import seed_everything
 
 class StructuredNSTest(unittest.TestCase):
     def test_structured_tail(self):

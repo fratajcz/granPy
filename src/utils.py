@@ -1,5 +1,7 @@
 import dataclasses
 from typing import List, Dict
+import torch
+import psutil
 
 @dataclasses.dataclass
 class opts():
@@ -13,7 +15,7 @@ class opts():
     test_fraction: float = dataclasses.field(default=0.2)
     undirected: bool = dataclasses.field(default=False)
     groundtruth: str = dataclasses.field(default="chipunion")
-    split_by_node: bool = dataclasses.field(default=False)
+    eval_split: str = dataclasses.field(default="edges")
     sampling_power: float = dataclasses.field(default=-0.75)
     
     # Model parameters
@@ -29,6 +31,7 @@ class opts():
     model: str = dataclasses.field(default="AutoEncoder")
     encoder: str = dataclasses.field(default=None)
     model_path: str = dataclasses.field(default='./models/')
+    p: int = dataclasses.field(default=2)
     
     # Training/Evaluation parameters
     lr: float = dataclasses.field(default=0.001)
@@ -40,6 +43,14 @@ class opts():
     epochs: int = dataclasses.field(default=500)
     negative_sampling: str = dataclasses.field(default=None)
     score_batched: bool = dataclasses.field(default=False)
+    binarize_prediction: bool = dataclasses.field(default=False)
+    eval_every: int = dataclasses.field(default=1)
+    
+    # Diffusion parameters
+    diffusion: bool = dataclasses.field(default=False)
+    diffusion_steps: int = dataclasses.field(default=100)
+    fixed_t: float = dataclasses.field(default=None)
+    unmask_topk: bool = dataclasses.field(default=True)
     
     # General settings
     cuda: str = dataclasses.field(default="auto")
@@ -48,7 +59,7 @@ class opts():
     wandb_save_model: bool = dataclasses.field(default=True)
     wandb_group: str = dataclasses.field(default=None)
     cache_model: bool = dataclasses.field(default=False)    
-                
+    verbose: bool = dataclasses.field(default=True)     
 
 def dataset_hash_keys():
     keys = [
@@ -59,7 +70,7 @@ def dataset_hash_keys():
         "dataset",
         "undirected",
         "groundtruth",
-        "split_by_node",
+        "eval_split",
         "sampling_power"
         ]
     
@@ -87,7 +98,12 @@ def model_hash_keys():
         "val_metric",
         "test_metrics",
         "epochs",
-        "negative_sampling"
+        "negative_sampling",
+        "diffusion",
+        "diffusion_steps",
+        "eval_every",
+        "unmask_topk",
+        "fixed_t"
     ]
 
     return keys
@@ -124,3 +140,10 @@ def hash(dataclass_object, include):
     m = hashlib.blake2b(digest_size=5)
     m.update(str(rv).encode("utf-8"))
     return m.hexdigest()
+
+def print_memory(device):
+    if device == "cpu":
+        return (f"RAM@{int(psutil.virtual_memory().used/ (1024.0 ** 3))}GB")
+    
+    elif device.startswith("cuda:"):
+        return (f"CUDA@{int(torch.cuda.memory_allocated(device)/ (1024.0 ** 3))}GB")

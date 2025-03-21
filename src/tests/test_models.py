@@ -1,10 +1,9 @@
 import unittest
 from src.nn.encoders import GNNEncoder, MLPEncoder
-import src.nn.layers as own_layers
 import dataclasses
 import torch.nn as nn
 from src.nn.decoders import DegreeSorter, MLPDecoder, CorrelationDecoder
-from src.nn.models import NaiveModel, AutoEncoder
+from src.nn.models import NaiveModel
 from scipy.stats import pearsonr
 import src.nn.models as models
 import torch
@@ -27,8 +26,6 @@ class NaiveModelTest(unittest.TestCase):
         model = getattr(models, opts().model)(100, opts())
 
         self.assertTrue(isinstance(model, NaiveModel))
-
-
 
     def test_init(self):
 
@@ -167,24 +164,6 @@ class EncoderTest(unittest.TestCase):
         encoder = GNNEncoder(1000, opts())
 
         self.assertTrue(encoder.nn[1].heads, opts().mplayer_kwargs["heads"])
-
-
-    def test_get_own_mplayer(self):
-
-        @dataclasses.dataclass
-        class opts:
-            n_conv_layers = 3
-            activation_layer = "ReLU"
-            dropout_ratio = 0.5
-            mplayer = "NoneConv"
-            mplayer_args = []
-            mplayer_kwargs = {}
-            latent_dim = 32
-            layer_ratio = 10
-
-        encoder = GNNEncoder(1000, opts())
-
-        self.assertTrue(isinstance(encoder.nn[1], own_layers.NoneConv))
 
     def test_MLPEncoder(self):
         @dataclasses.dataclass

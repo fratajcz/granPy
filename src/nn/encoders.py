@@ -5,7 +5,7 @@ from torch_geometric.utils import add_self_loops, to_undirected
 
 
 class GNNEncoder(torch.nn.Module):
-    def __init__(self, input_dim, opts):
+    def __init__(self, input_dim, opts, num_nodes):
         assert opts.n_conv_layers in [1, 2, 3]
         assert opts.layer_ratio >= 1
 
@@ -46,9 +46,16 @@ class GNNEncoder(torch.nn.Module):
     def forward(self, x, edge_index):
         return self.nn(x, add_self_loops(to_undirected(edge_index), num_nodes=x.shape[0])[0])
 
+class GNNGraphOnlyEncoder(GNNEncoder):
+    def __init__(self, input_dim, opts, num_nodes):
+        super(GNNGraphOnlyEncoder, self).__init__(num_nodes, opts, num_nodes)
+
+    def forward(self, x, edge_index):
+        print(x.shape, torch.eye(x.shape[0], device=x.device).shape)
+        return self.nn(torch.eye(x.shape[0], device=x.device), add_self_loops(to_undirected(edge_index), num_nodes=x.shape[0])[0])
 
 class MLPEncoder(torch.nn.Module):
-    def __init__(self, input_dim, opts):
+    def __init__(self, input_dim, opts, num_nodes):
         assert opts.n_conv_layers in [1, 2, 3]
         assert opts.layer_ratio >= 1
 
@@ -78,7 +85,7 @@ class MLPEncoder(torch.nn.Module):
         return self.nn(x)
 
 class IdentityEncoder(torch.nn.Module):
-    def __init__(self, input_dim, opts):
+    def __init__(self, input_dim, opts, num_nodes):
         """ Dummy encoder that does nothing """
         super(IdentityEncoder, self).__init__()
         opts.latent_dim = input_dim

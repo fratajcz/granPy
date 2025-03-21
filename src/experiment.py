@@ -1,6 +1,6 @@
 from src.datasets import DatasetBootstrapper
 import src.nn.models as models
-from src.utils import get_dataset_hash, get_model_hash
+from src.utils import get_dataset_hash, get_model_hash, print_memory
 from src.negative_sampling import neg_sampling
 import torch
 from torch.nn import BCEWithLogitsLoss
@@ -13,7 +13,7 @@ from tqdm import tqdm
 import numpy as np
 import wandb
 import uuid
-from wandb import Api
+from src.diffusion import DiffusionWrapper
 
 class Experiment:
     def __init__(self, opts):
@@ -21,17 +21,23 @@ class Experiment:
 
         self.model_hash = get_model_hash(opts)
         self.dataset_hash = get_dataset_hash(opts)
+        
+        self.device = self.devices[0]
 
         self.dataset = DatasetBootstrapper(opts, hash=self.dataset_hash).get_dataset()
+        self.dataset.to(self.device)
 
-        self.dataset.to(self.devices[0])
-
-        self.model = getattr(models, opts.model)(input_dim=self.dataset.train_data.x.shape[1], opts=opts).to(self.devices[0])
-
-        self.loss_function = BCEWithLogitsLoss()
+        self.model = getattr(models, opts.model)(input_dim=self.dataset.train_data.x.shape[1], opts=opts, num_nodes=self.dataset.train_data.x.shape[0]).to(self.device)
+        
+        self.diffusion = opts.diffusion
+        if self.diffusion:
+            self.model = DiffusionWrapper(model=self.model,opts=opts, device=self.device).to(self.device)
+            self.loss_function = self.model.diff_loss
+            self.unmask_topk = opts.unmask_topk
+        else:
+            self.loss_function = BCEWithLogitsLoss()
 
         self.optimizer = Adam(self.model.parameters(), lr=opts.lr)
-
         self.lrscheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer)
 
         if self.opts.val_mode == "max":
@@ -42,8 +48,9 @@ class Experiment:
             raise ValueError("Validation Mode can either be max or min, but not {}".format(self.opts.val_mode))
 
         self.initial_patience = opts.es_patience
-
         self.patience = opts.es_patience
+        
+        self.binarize = opts.binarize_prediction
 
         self.test_performance = None
 
@@ -57,19 +64,24 @@ class Experiment:
         if not (self.opts.cache_model and self.cached_model):
             if not eval_only:
                 for epoch in (pbar := tqdm(range(self.opts.epochs))):
+                    self.epoch = epoch
                     pbar.set_description("Best {}: {}".format(self.opts.val_metric, self.best_val_performance))
                     self.train_step()
+                    
+                    if self.opts.verbose:
+                        print(f"epoch {epoch}: {print_memory(self.device)}")
 
-                    did_improve = self.eval_step(target="val")
+                    if epoch % self.opts.eval_every == 0 and epoch > 0:
+                        did_improve = self.eval_step(target="val")
 
-                    if self.out_of_patience(did_improve):
-                        break
+                        if self.out_of_patience(did_improve):
+                            break
 
             self.load_model()
 
         self.eval_step(target="test")
 
-        if self.opts.wandb_tracking and wandb.run is not None:
+        if self.opts.wandb_tracking and (wandb.run is not None):
             wandb.log(self.test_performance)
             wandb.run.summary[f"val_{self.opts.val_metric}"] = self.best_val_performance
             if self.opts.wandb_save_model:
@@ -86,7 +98,7 @@ class Experiment:
 
         data = self.dataset.train_data
 
-        loss, _, _ = self.get_loss(data)
+        loss, _, _ = self.get_loss(data, "train")
 
         if loss.requires_grad:
 
@@ -94,22 +106,22 @@ class Experiment:
 
             self.optimizer.step()
         
-        if self.opts.wandb_tracking: wandb.log({"train_loss": loss}, commit=False)
+        if self.opts.wandb_tracking: wandb.log({"train_loss": loss}, step=self.epoch)
         
         return loss
 
+    @torch.no_grad
     def eval_step(self, target):
         self.model.eval()
-        self.model.zero_grad()
         did_improve = False
 
         data = getattr(self.dataset, "{}_data".format(target))
 
-        loss, pos_out, neg_out = self.get_loss(data)
+        loss, pos_out, neg_out = self.get_loss(data, target)
 
         if target == "val":
             value = self.get_metric(pos_out, neg_out, [self.opts.val_metric])[self.opts.val_metric]
-            if self.opts.wandb_tracking: wandb.log({("val_" + self.opts.val_metric): value, "val_loss": loss}, commit=True)
+            if self.opts.wandb_tracking: wandb.log({("val_" + self.opts.val_metric): value, "val_loss": loss}, step=self.epoch)
             if self.is_best_val_performance(value):
                 self.best_val_performance = value
                 self.save_model()
@@ -129,14 +141,22 @@ class Experiment:
         else:
             return self.best_val_performance > value
     
-    def get_loss(self, data):
-        z = self.model.encode(data.x, data.edge_index)
-
-        pos_out = self.model.decode(z, data.pos_edges, pos_edge_index=data.edge_index)
-
+    def get_loss(self, data, target="train"):
         neg_edges = self.get_negative_edges(data)
-
-        neg_out = self.model.decode(z, neg_edges, pos_edge_index=data.edge_index)
+        
+        if self.diffusion:
+            if target == "train":
+                pos_out, neg_out = self.model.train_scores(data.x, data.edge_index, neg_edges)
+            else:
+                pos_out, neg_out = self.model.eval_scores(data.x, target=data.edge_index, pos_eval=data.pos_edges, neg_eval=neg_edges, unmask_topk=self.unmask_topk)
+        else:
+            z = self.model.encode(data.x, data.edge_index)
+            pos_out = self.model.decode(z, data.pos_edges, pos_edge_index=data.edge_index)
+            neg_out = self.model.decode(z, neg_edges, pos_edge_index=data.edge_index)
+            
+        if self.binarize and target != "train":
+            pos_out = torch.bernoulli(pos_out)
+            neg_out = torch.bernoulli(neg_out)
 
         pos_loss = self.loss_function(pos_out, torch.ones_like(pos_out))
         neg_loss = self.loss_function(neg_out, torch.zeros_like(neg_out))
@@ -147,17 +167,16 @@ class Experiment:
         state_dict = {
             'model_state_dict': self.model.state_dict(),
         }
-        if not os.path.exists(os.path.dirname(self.opts.model_path)):
-            os.makedirs(os.path.dirname(self.opts.model_path))
+        os.makedirs(os.path.dirname(self.opts.model_path), exist_ok=True)
         torch.save(state_dict, os.path.join(self.opts.model_path, self.model_hash + ".pt"))
-        
+       
     def delete_model(self):
         try:
             path = os.path.join(self.opts.model_path, self.model_hash + ".pt")
             os.remove(path)
         except: 
             print("Model could not be deleted - maybe it does not exist")
-            
+    
     def log_model(self):
         if wandb.run.sweep_id is not None:
             api = wandb.Api()
@@ -171,7 +190,7 @@ class Experiment:
         else:
             wandb.run.log_model(path=os.path.join(self.opts.model_path, self.model_hash + ".pt"))
 
-    def load_model(self, path=None):
+    def load_model(self):
         '''loads a state dict either from the current run or from a given path'''
         path = os.path.join(self.opts.model_path, self.model_hash + ".pt")
         if torch.cuda.is_available():
@@ -235,7 +254,7 @@ class Experiment:
                 continue
 
             scores = torch.cat((pos, neg)).detach().cpu().numpy()
-            labels = torch.cat((torch.ones_like(pos), torch.zeros_like(neg))).cpu().numpy()
+            labels = torch.cat((torch.ones_like(pos), torch.zeros_like(neg))).detach().cpu().numpy()
 
             for metric in metrics:
                 function = getattr(skmetrics, metric)
