@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument('--negative_sampling', type=str)
     parser.add_argument('--cuda', type=str)
     parser.add_argument('--groundtruth', type=str)
-    parser.add_argument('--diffusion', type=str)
+    parser.add_argument('--diffusion', type=str, default="False")
     parser.add_argument('--diffusion_steps', type=int)
     parser.add_argument('--eval_every', type=int)
     parser.add_argument('--binarize_prediction', type=str)
